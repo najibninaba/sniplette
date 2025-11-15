@@ -14,6 +14,9 @@ import (
 	"ig2wa/internal/encoder"
 	"ig2wa/internal/model"
 	"ig2wa/internal/util"
+
+	"ig2wa/internal/ui"
+	"golang.org/x/term"
 )
 
 const (
@@ -33,6 +36,22 @@ func main() {
 		os.Exit(ExitCLIError)
 	}
 
+	// UI path: enabled when stdout is a TTY and not explicitly disabled.
+	if !parsed.Options.NoUI && isTerminal() {
+		// Ensure output directory exists before launching TUI
+		if err := util.EnsureDir(parsed.Options.OutDir); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to create output dir: %v\n", err)
+			os.Exit(ExitCLIError)
+		}
+		if err := ui.Run(ctx, parsed.URLs, parsed.Options); err != nil {
+			// UI returns an error if any job failed; print and exit non-zero
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(ExitCLIError)
+		}
+	os.Exit(ExitOK)
+	}
+
+	// Non-UI fallback (legacy textual flow)
 	// Dependency detection
 	downloaderPath, derr := findDownloader(parsed.Options.DLBinary)
 	if derr != nil {
@@ -69,6 +88,10 @@ func main() {
 	}
 
 	os.Exit(ExitOK)
+}
+
+func isTerminal() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
 var (

@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"ig2wa/internal/model"
+	"ig2wa/internal/progress"
 	"ig2wa/internal/util"
 )
 
@@ -17,6 +19,10 @@ type Options struct {
 	FFmpegPath string
 	Verbose    bool
 	OutputPath string // Full path of desired output file (including extension)
+
+	// Progress reporting (optional)
+	Reporter progress.Reporter
+	JobID    string
 }
 
 // Encode performs the transcoding according to the provided options.
@@ -67,6 +73,12 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 	if opts.OutputPath == "" {
 		return model.OutputVideo{}, errors.New("output path is required")
 	}
+
+	// Add ffmpeg machine-readable progress if reporting and not verbose passthrough
+	if opts.Reporter != nil && !opts.Verbose {
+		args = append(args, "-progress", "pipe:1", "-nostats")
+	}
+
 	args = append(args, opts.OutputPath)
 
 	// Ensure output dir exists
@@ -74,10 +86,86 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 		return model.OutputVideo{}, fmt.Errorf("ensure output dir: %w", err)
 	}
 
+	if opts.Reporter != nil {
+		opts.Reporter.Update(progress.Update{
+			JobID:   opts.JobID,
+			Stage:   progress.StageEncoding,
+			Percent: 0,
+			Message: "Encoding",
+		})
+	}
+
+	var outTimeMs int64
+	var speedStr string
+	var totalSize int64
+
 	_, runErr := util.Run(ctx, util.CmdSpec{
 		Path:    opts.FFmpegPath,
 		Args:    args,
-		Verbose: opts.Verbose,
+		Verbose: opts.Verbose && opts.Reporter == nil,
+		// ffmpeg -progress writes to stdout; avoid large capture when reporting
+		CaptureStdout: opts.Reporter == nil,
+		StdoutLine: func(line string) {
+			// key=value pairs, e.g., out_time_ms=123456 speed=1.2x total_size=...
+			if opts.Reporter == nil {
+				return
+			}
+			if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				val := strings.TrimSpace(kv[1])
+				switch key {
+				case "out_time_ms":
+					if v, err := strconv.ParseInt(val, 10, 64); err == nil {
+						outTimeMs = v
+					}
+				case "speed":
+					speedStr = val
+				case "total_size":
+					if v, err := strconv.ParseInt(val, 10, 64); err == nil {
+						totalSize = v
+					}
+				case "progress":
+					// Emit on progress markers for smoother UI
+					percent := -1.0
+					if in.DurationSec > 0 {
+						den := in.DurationSec * 1_000_000 // out_time_ms uses microseconds
+						if den > 0 {
+							percent = (float64(outTimeMs) / (den)) * 100.0
+							if percent > 100 {
+								percent = 100
+							}
+						}
+					}
+					var sptr *string
+					if speedStr != "" {
+						s := speedStr
+						sptr = &s
+					}
+					var bptr *int64
+					if totalSize > 0 {
+						ts := totalSize
+						bptr = &ts
+					}
+					opts.Reporter.Update(progress.Update{
+						JobID:   opts.JobID,
+						Stage:   progress.StageEncoding,
+						Percent: percent,
+						Speed:   sptr,
+						Bytes:   bptr,
+						Message: "Encoding",
+					})
+				}
+			}
+			// In verbose mode, also forward logs into UI
+			if opts.Verbose {
+				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStdout, Line: line})
+			}
+		},
+		StderrLine: func(line string) {
+			if opts.Reporter != nil && opts.Verbose {
+				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStderr, Line: line})
+			}
+		},
 	})
 	if runErr != nil {
 		// Delete incomplete file
@@ -142,15 +230,78 @@ func encodeAudioOnly(ctx context.Context, inputPath string, opts Options, enc mo
 		"-c:a", "aac",
 		"-b:a", fmt.Sprintf("%dk", nonZero(enc.AudioBitrateKbps, 128)),
 		"-movflags", "+faststart",
-		opts.OutputPath,
 	}
+	if opts.Reporter != nil && !opts.Verbose {
+		args = append(args, "-progress", "pipe:1", "-nostats")
+	}
+	args = append(args, opts.OutputPath)
+
 	if err := util.EnsureDir(filepath.Dir(opts.OutputPath)); err != nil {
 		return model.OutputVideo{}, fmt.Errorf("ensure output dir: %w", err)
 	}
+
+	if opts.Reporter != nil {
+		opts.Reporter.Update(progress.Update{
+			JobID:   opts.JobID,
+			Stage:   progress.StageEncoding,
+			Percent: 0,
+			Message: "Encoding (audio)",
+		})
+	}
+
+	var speedStr string
+	var totalSize int64
+
 	_, runErr := util.Run(ctx, util.CmdSpec{
-		Path:    opts.FFmpegPath,
-		Args:    args,
-		Verbose: opts.Verbose,
+		Path:          opts.FFmpegPath,
+		Args:          args,
+		Verbose:       opts.Verbose && opts.Reporter == nil,
+		CaptureStdout: opts.Reporter == nil,
+		StdoutLine: func(line string) {
+			if opts.Reporter == nil {
+				return
+			}
+			if kv := strings.SplitN(line, "=", 2); len(kv) == 2 {
+				key := strings.TrimSpace(kv[0])
+				val := strings.TrimSpace(kv[1])
+				switch key {
+				case "speed":
+					speedStr = val
+				case "total_size":
+					if v, err := strconv.ParseInt(val, 10, 64); err == nil {
+						totalSize = v
+					}
+				case "progress":
+					var sptr *string
+					if speedStr != "" {
+						s := speedStr
+						sptr = &s
+					}
+					var bptr *int64
+					if totalSize > 0 {
+						ts := totalSize
+						bptr = &ts
+					}
+					// No known duration for audio-only path; percent may be unknown
+					opts.Reporter.Update(progress.Update{
+						JobID:   opts.JobID,
+						Stage:   progress.StageEncoding,
+						Percent: -1,
+						Speed:   sptr,
+						Bytes:   bptr,
+						Message: "Encoding (audio)",
+					})
+				}
+			}
+			if opts.Verbose {
+				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStdout, Line: line})
+			}
+		},
+		StderrLine: func(line string) {
+			if opts.Reporter != nil && opts.Verbose {
+				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStderr, Line: line})
+			}
+		},
 	})
 	if runErr != nil {
 		_ = util.RemoveIfExists(opts.OutputPath)

@@ -36,6 +36,9 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 	var dlBinary string
 	var dryRun bool
 	var verbose bool
+	// New UI-related flags
+	var noUI bool
+	var jobs int
 
 	fs.StringVar(&outDir, "out-dir", ".", "Output directory")
 	fs.StringVar(&outDir, "o", ".", "Output directory (shorthand)")
@@ -49,6 +52,9 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 	fs.BoolVar(&dryRun, "dry-run", false, "Show plan without executing")
 	fs.BoolVar(&verbose, "verbose", false, "Show full subprocess commands/output")
 	fs.BoolVar(&verbose, "v", false, "Show full subprocess commands/output (shorthand)")
+	// Define new flags
+	fs.BoolVar(&noUI, "no-ui", false, "Disable TUI; use plain textual output")
+	fs.IntVar(&jobs, "jobs", 2, "Max concurrent jobs in TUI")
 
 	if err := fs.Parse(args); err != nil {
 		return Parsed{}, err
@@ -101,6 +107,10 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 	}
 	outDir = filepath.Clean(outDir)
 
+	if jobs <= 0 {
+		jobs = 2
+	}
+
 	opts := model.CLIOptions{
 		OutDir:     outDir,
 		MaxSizeMB:  maxSizeMB,
@@ -112,6 +122,8 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 		DLBinary:   dlBinary,
 		DryRun:     dryRun,
 		Verbose:    verbose,
+		NoUI:       noUI,
+		Jobs:       jobs,
 	}
 
 	return Parsed{

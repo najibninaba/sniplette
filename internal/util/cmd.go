@@ -1,14 +1,15 @@
 package util
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 // CmdSpec describes a subprocess to run.
@@ -18,6 +19,11 @@ type CmdSpec struct {
 	Env     []string // Optional environment variables (KEY=VALUE). If nil, inherit.
 	Dir     string   // Working directory; empty = inherit.
 	Verbose bool     // Stream stdout/stderr while capturing
+
+	// New options for per-line streaming and memory control:
+	StdoutLine    func(string) // Called for each stdout line (if non-nil)
+	StderrLine    func(string) // Called for each stderr line (if non-nil)
+	CaptureStdout bool         // When false, do not buffer stdout into CmdResult (still invoke StdoutLine)
 }
 
 // CmdResult contains captured output and exit status.
@@ -29,8 +35,9 @@ type CmdResult struct {
 }
 
 // Run executes the command, optionally streaming output if Verbose is true.
-// It always captures stdout and stderr. On non-zero exit, returns an error
-// explaining the exit code, while also populating CmdResult.Code and buffers.
+// It always captures stderr. Stdout capture can be disabled with CaptureStdout=false.
+// On non-zero exit, returns an error describing the exit code, while also
+// populating CmdResult.Code and captured buffers.
 func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 	var stdoutBuf, stderrBuf bytes.Buffer
 
@@ -42,24 +49,83 @@ func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 		cmd.Env = append(os.Environ(), spec.Env...)
 	}
 
-	// Prepare stdout/stderr writers
-	var stdoutW io.Writer = &stdoutBuf
-	var stderrW io.Writer = &stderrBuf
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return CmdResult{Stdout: nil, Stderr: nil, Code: -1, Err: err}, err
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return CmdResult{Stdout: nil, Stderr: nil, Code: -1, Err: err}, err
+	}
+
 	if spec.Verbose {
-		stdoutW = io.MultiWriter(&stdoutBuf, os.Stdout)
-		stderrW = io.MultiWriter(&stderrBuf, os.Stderr)
-		// Print the command line
+		// Print the command line before execution
 		fmt.Fprintf(os.Stderr, "+ %s\n", shellQuote(spec.Path, spec.Args))
 	}
-	cmd.Stdout = stdoutW
-	cmd.Stderr = stderrW
 
-	err := cmd.Start()
-	if err != nil {
-		return CmdResult{Stdout: stdoutBuf.Bytes(), Stderr: stderrBuf.Bytes(), Code: -1, Err: err}, err
+	if err := cmd.Start(); err != nil {
+		return CmdResult{Stdout: nil, Stderr: nil, Code: -1, Err: err}, err
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// stdout reader goroutine
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(stdoutPipe)
+		for sc.Scan() {
+			line := sc.Text()
+			// Invoke callback first so real-time consumers see it
+			if spec.StdoutLine != nil {
+				spec.StdoutLine(line)
+			}
+			// Verbose streaming to terminal
+			if spec.Verbose {
+				fmt.Fprintln(os.Stdout, line)
+			}
+			// Optional capture to buffer
+			if spec.CaptureStdout || spec.StdoutLine == nil {
+				stdoutBuf.WriteString(line)
+				stdoutBuf.WriteByte('\n')
+			}
+		}
+		// If the scanner errors, preserve it in buffers for debugging
+		if err := sc.Err(); err != nil {
+			// Do not fail outright; command exit will reflect errors
+			if spec.Verbose {
+				fmt.Fprintf(os.Stderr, "stdout scan error: %v\n", err)
+			}
+		}
+	}()
+
+	// stderr reader goroutine
+	go func() {
+		defer wg.Done()
+		sc := bufio.NewScanner(stderrPipe)
+		for sc.Scan() {
+			line := sc.Text()
+			if spec.StderrLine != nil {
+				spec.StderrLine(line)
+			}
+			if spec.Verbose {
+				fmt.Fprintln(os.Stderr, line)
+			}
+			// Always capture stderr
+			stderrBuf.WriteString(line)
+			stderrBuf.WriteByte('\n')
+		}
+		if err := sc.Err(); err != nil {
+			if spec.Verbose {
+				fmt.Fprintf(os.Stderr, "stderr scan error: %v\n", err)
+			}
+		}
+	}()
+
 	waitErr := cmd.Wait()
+	// Ensure readers drain remaining data
+	wg.Wait()
+
 	code := 0
 	if waitErr != nil {
 		var exitErr *exec.ExitError
@@ -78,7 +144,6 @@ func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 	}
 
 	if waitErr != nil {
-		// Return a descriptive error but keep captured outputs.
 		return res, fmt.Errorf("command failed (exit %d): %w", code, waitErr)
 	}
 	return res, nil

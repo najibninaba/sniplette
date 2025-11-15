@@ -29,6 +29,9 @@ type CLIOptions struct {
 	DLBinary   string // Optional explicit path to yt-dlp/youtube-dl
 	DryRun     bool
 	Verbose    bool
+
+	NoUI bool // Disable TUI when true
+	Jobs int  // Max concurrent jobs for TUI
 }
 
 // DownloadedVideo represents the media and metadata returned by the downloader.
