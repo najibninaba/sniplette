@@ -14,7 +14,7 @@ func (m Model) viewHeader() string {
 			done++
 		}
 	}
-	title := m.styles.Title.Render("ig2wa — Instagram to WhatsApp")
+	title := m.styles.Title.Render("ig2wa — Instagram/YouTube to WhatsApp")
 	sub := m.styles.Subtitle.Render(fmt.Sprintf("Jobs: %d/%d done • q: quit", done, total))
 	return title + "\n" + sub
 }

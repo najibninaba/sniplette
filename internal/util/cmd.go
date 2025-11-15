@@ -74,6 +74,11 @@ func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 	go func() {
 		defer wg.Done()
 		sc := bufio.NewScanner(stdoutPipe)
+		// Increase buffer size to handle large JSON outputs (e.g., yt-dlp --dump-json)
+		// Default is 64KB, but YouTube metadata can be 500KB+
+		const maxCapacity = 1024 * 1024 // 1 MB
+		buf := make([]byte, 0, 64*1024)  // initial buffer
+		sc.Buffer(buf, maxCapacity)
 		for sc.Scan() {
 			line := sc.Text()
 			// Invoke callback first so real-time consumers see it
@@ -103,6 +108,10 @@ func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 	go func() {
 		defer wg.Done()
 		sc := bufio.NewScanner(stderrPipe)
+		// Increase buffer size for large stderr outputs
+		const maxCapacity = 1024 * 1024 // 1 MB
+		buf := make([]byte, 0, 64*1024)
+		sc.Buffer(buf, maxCapacity)
 		for sc.Scan() {
 			line := sc.Text()
 			if spec.StderrLine != nil {

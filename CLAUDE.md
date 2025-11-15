@@ -12,7 +12,7 @@ This workspace is configured with RepoPrompt (RP) tools for enhanced development
 
 ## Overview
 
-ig2wa is a Go CLI tool that downloads Instagram videos/Reels and transcodes them into WhatsApp-friendly MP4 files. It orchestrates `yt-dlp` (or `youtube-dl`) for downloading and `ffmpeg` for encoding.
+ig2wa downloads videos from Instagram or YouTube and transcodes them into WhatsApp-friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress.
 
 ## Build & Development Commands
 
@@ -30,11 +30,24 @@ go run ./cmd/ig2wa <instagram-url> [flags]
 ./ig2wa --dry-run https://www.instagram.com/reel/ABC123/
 ```
 
+### Example
+
+```bash
+# Instagram
+ig2wa https://www.instagram.com/reel/ABC123/
+
+# YouTube (short link)
+ig2wa https://youtu.be/XXXXXXXXXXX
+
+# YouTube (full link)
+ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
+```
+
 ## Architecture
 
 ### High-Level Flow
 
-1. **CLI Parsing** (`internal/cli/flags.go`): Parses command-line flags and validates Instagram URLs
+1. **CLI Parsing** (`internal/cli/flags.go`): Parses command-line flags and validates URLs (Instagram: instagram.com, instagr.am; YouTube: youtube.com, youtu.be)
 2. **Dependency Detection** (`cmd/ig2wa/main.go`): Locates `yt-dlp`/`youtube-dl` and `ffmpeg` in PATH
 3. **UI Mode Selection** (`cmd/ig2wa/main.go:40-52`):
    - If stdout is a TTY and `--no-ui` not set → launches Bubble Tea TUI (`internal/ui/`)
@@ -129,3 +142,21 @@ Constructed in `buildOutputBasename()` functions (duplicated in `main.go` and `u
 - Format: `{uploader}_{id}_{resolution}p_{size_or_crf}.mp4`
 - Example: `username_ABC123_720p_50MB.mp4` or `username_ABC123_1080p_CRF22.mp4`
 - Uploader and ID are sanitized via `util.SanitizeFilename()` to remove unsafe characters
+
+## Test Run
+
+Try a few URLs to verify:
+
+```bash
+# Instagram
+ig2wa https://www.instagram.com/reel/ABC123/
+
+# YouTube short
+ig2wa https://youtu.be/XXXXXXXXXXX
+
+# YouTube full
+ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
+
+# Mixed batch
+ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB
+```

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"ig2wa/internal/model"
+	"ig2wa/internal/util"
 )
 
 // Parsed is the result of ParseFlags.
@@ -62,7 +63,7 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 
 	rem := fs.Args()
 	if len(rem) == 0 {
-		return Parsed{}, errors.New("usage: ig2wa <instagram-url> [<instagram-url> ...] [flags]")
+		return Parsed{}, errors.New("usage: ig2wa <url> [<url> ...] [flags]\nsupported: Instagram (instagram.com, instagr.am) and YouTube (youtube.com, youtu.be)")
 	}
 
 	quality = strings.ToLower(quality)
@@ -76,11 +77,11 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 	}
 
 	var urls []string
-	for _, u := range rem {
-		if err := validateInstagramURL(u); err != nil {
+	for _, raw := range rem {
+		if _, _, err := util.DetectPlatform(raw); err != nil {
 			return Parsed{}, err
 		}
-		urls = append(urls, u)
+		urls = append(urls, raw)
 	}
 
 	// Resolve defaults based on preset

@@ -1,6 +1,6 @@
 # ig2wa
 
-ig2wa is a small Go CLI tool that downloads Instagram videos/Reels and transcodes them into WhatsApp-friendly MP4 files. It orchestrates external tools (`yt-dlp` or `youtube-dl`, and `ffmpeg`) to fetch and encode content for sharing.
+ig2wa is a small Go CLI tool that downloads Instagram or YouTube videos (including Reels/Shorts) and transcodes them into WhatsApp-friendly MP4 files. It orchestrates external tools (`yt-dlp` or `youtube-dl`, and `ffmpeg`) to fetch and encode content for sharing.
 
 - Preferred downloader: `yt-dlp` (fallback to `youtube-dl`)
 - Encoder: `ffmpeg`
@@ -9,6 +9,10 @@ ig2wa is a small Go CLI tool that downloads Instagram videos/Reels and transcode
 - Captions saved alongside videos by default (`.txt`)
 
 This tool does not bypass authentication or DRM; it only works with publicly accessible URLs.
+
+## Supported platforms
+- Instagram: `instagram.com`, `instagr.am`
+- YouTube: `youtube.com`, `youtu.be`
 
 ## Requirements
 
@@ -83,7 +87,7 @@ go install ./cmd/ig2wa
 Basic syntax:
 
 ```bash
-ig2wa <instagram-url> [<instagram-url> ...] [flags]
+ig2wa <url> [<url> ...] [flags]
 ```
 
 Core flags:
@@ -128,6 +132,15 @@ ig2wa --dry-run -v https://www.instagram.com/reel/ABC123/
 IG2WA_DL_BINARY=/usr/local/bin/yt-dlp ig2wa https://www.instagram.com/reel/ABC123/
 # or
 ig2wa --dl-binary /usr/local/bin/yt-dlp https://www.instagram.com/reel/ABC123/
+
+# YouTube video (short link)
+ig2wa https://youtu.be/XXXXXXXXXXX
+
+# YouTube video (full link)
+ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
+
+# Batch download from mixed sources
+ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB
 ```
 
 ## Output Details
