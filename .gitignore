@@ -1,0 +1,40 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Root-level binaries (from go build without -o flag)
+/ig2wa
+/ig2wa-*
+
+# Build outputs
+/build/
+/bin/
+/dist/
+/out/
+/cover/
+/coverage/
+/tmp/
+
+# Go module/work files
+go.work
+go.work.sum
+
+# Logs and artifacts
+*.log
+*.out
+coverage.txt
+
+# Vendor (if used)
+/vendor/
+
+# IDE/editor settings
+.idea/
+.vscode/
+.DS_Store
+
+# OS files
+Thumbs.db
