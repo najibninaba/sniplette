@@ -148,10 +148,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			js.err = r.Err
 			if r.Err == nil {
 				js.stage = progress.StageCompleted
-				js.status = "Completed"
+				js.percent = 100
 				js.outputPath = r.OutputPath
 				js.bytes = r.Bytes
-				js.percent = 100
+				// Set informative status with basename and size
+				if r.OutputPath != "" {
+					name := filepath.Base(r.OutputPath)
+					size := humanizeBytes(r.Bytes)
+					if m.opts.DryRun {
+						js.status = fmt.Sprintf("Planned: %s (%s)", name, size)
+					} else {
+						js.status = fmt.Sprintf("Saved: %s (%s)", name, size)
+					}
+				} else {
+					js.status = "Completed"
+				}
 			} else {
 				js.stage = progress.StageError
 				js.status = r.Err.Error()
@@ -181,6 +192,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	summary := m.viewSummary()
+	if summary != "" {
+		return m.viewHeader() + "\n\n" + m.viewJobs() + "\n" + summary
+	}
 	return m.viewHeader() + "\n\n" + m.viewJobs()
 }
 
@@ -290,11 +305,12 @@ func (m Model) runJob(jobID, url string) {
 
 	if m.opts.DryRun {
 		// Present plan as status
+		name := filepath.Base(outputPath)
 		rep.Update(progress.Update{
 			JobID:   jobID,
 			Stage:   progress.StageCompleted,
 			Percent: 100,
-			Message: "Planned (dry-run)",
+			Message: fmt.Sprintf("Planned: %s (dry-run)", name),
 		})
 		rep.Result(progress.Result{JobID: jobID, OutputPath: outputPath, Bytes: 0, Err: nil})
 		return
@@ -321,6 +337,16 @@ func (m Model) runJob(jobID, url string) {
 		}
 	}
 
+	// Send final update with filename before result
+	name := filepath.Base(out.OutputPath)
+	size := humanizeBytes(out.Bytes)
+	rep.Update(progress.Update{
+		JobID:   jobID,
+		Stage:   progress.StageCompleted,
+		Percent: 100,
+		Message: fmt.Sprintf("Saved: %s (%s)", name, size),
+	})
+
 	rep.Result(progress.Result{JobID: jobID, OutputPath: out.OutputPath, Bytes: out.Bytes, Err: nil})
 }
 
@@ -329,6 +355,11 @@ type teaReporter struct {
 }
 
 func (r teaReporter) Update(u progress.Update) {
+	// Block on completion messages to ensure they're delivered
+	if u.Stage == progress.StageCompleted || u.Stage == progress.StageError {
+		r.ch <- jobUpdateMsg{U: u}
+		return
+	}
 	select {
 	case r.ch <- jobUpdateMsg{U: u}:
 	default:
@@ -341,10 +372,8 @@ func (r teaReporter) Log(l progress.Log) {
 	}
 }
 func (r teaReporter) Result(res progress.Result) {
-	select {
-	case r.ch <- jobResultMsg{R: res}:
-	default:
-	}
+	// Always block on Result messages - they're critical
+	r.ch <- jobResultMsg{R: res}
 }
 
 func findDownloader(custom string) (string, error) {
@@ -446,6 +475,20 @@ func buildCaptionText(dv model.DownloadedVideo) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func humanizeBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit && exp < 4; n /= unit {
+		div *= unit
+		exp++
+	}
+	units := []string{"KB", "MB", "GB", "TB", "PB"}
+	return fmt.Sprintf("%.1f %s", float64(b)/float64(div), units[exp])
 }
 
 func max(a, b int) int {

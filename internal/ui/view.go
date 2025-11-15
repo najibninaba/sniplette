@@ -64,6 +64,29 @@ func (m Model) viewJob(js *jobState) string {
 	return m.styles.Box.Render(line1+"\n"+right+"\n"+line2)
 }
 
+func (m Model) viewSummary() string {
+	var completed []string
+	for _, id := range m.jobOrder {
+		js := m.jobs[id]
+		if js.done && js.err == nil && js.outputPath != "" {
+			completed = append(completed, js.outputPath)
+		}
+	}
+	
+	if len(completed) == 0 {
+		return ""
+	}
+	
+	var b strings.Builder
+	b.WriteString(m.styles.Subtitle.Render("✓ Completed Files:"))
+	b.WriteString("\n")
+	for _, path := range completed {
+		b.WriteString(m.styles.Success.Render("  • " + path))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 func truncate(s string, n int) string {
 	if n <= 0 || len([]rune(s)) <= n {
 		return s
