@@ -10,6 +10,49 @@ This workspace is configured with RepoPrompt (RP) tools for enhanced development
 - RP provides file operations, workspace management, and code structure analysis
 - For complex changes, use the chat tool's planning mode first, then switch to implementation
 
+### Git and GitHub Workflow
+
+**Git Operations**: Use standard `git` commands via the Bash tool for all Git operations:
+- Staging: `git add <files>`
+- Committing: `git commit -m "message"`
+- Pushing: `git push`
+- Status: `git status`
+- Diffing: `git diff`
+
+**GitHub Operations**: Use the `gh` CLI tool for all GitHub-specific operations:
+- Pull requests: `gh pr create`, `gh pr view`, `gh pr merge`
+- Issues: `gh issue create`, `gh issue list`
+- Repository operations: `gh repo view`, `gh repo fork`
+
+**Conventional Commit Messages**: All commits must follow conventional commit format:
+- Format: `type(scope): subject` or `type: subject`
+- Common types:
+  - `feat`: New feature
+  - `fix`: Bug fix
+  - `docs`: Documentation changes
+  - `refactor`: Code refactoring
+  - `test`: Test additions or changes
+  - `chore`: Build process, dependencies, tooling
+  - `perf`: Performance improvements
+  - `style`: Code style/formatting (not CSS)
+- Guidelines:
+  - No emojis in commit messages
+  - No self-attribution (e.g., no "Co-Authored-By: Claude")
+  - Use imperative mood ("add" not "added" or "adds")
+  - Keep subject line under 72 characters
+  - Provide detailed body if needed, separated by blank line
+- Examples:
+  - `feat: add video resolution auto-detection`
+  - `fix: handle empty metadata from yt-dlp`
+  - `docs: update build instructions to use Make commands`
+  - `refactor(encoder): extract bitrate calculation logic`
+
+**Default Behavior**: After successfully implementing a task:
+1. Review changes with `git status` and `git diff`
+2. Stage modified/new files with `git add`
+3. Create a conventional commit with clear, descriptive message
+4. Push to remote with `git push` (unless explicitly told not to)
+
 ## Overview
 
 Sniplette downloads videos from Instagram or YouTube and transcodes them into compact, messaging‑app‑friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress—perfect for producing tiny, snack-sized snips for sharing.
