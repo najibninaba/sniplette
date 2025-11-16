@@ -5,9 +5,9 @@
 .DEFAULT_GOAL := help
 
 # Variables
-BIN_NAME ?= ig2wa
+BIN_NAME ?= sniplette
 MODULE   ?= ig2wa
-CMD_DIR  ?= ./cmd/ig2wa
+CMD_DIR  ?= ./cmd/sniplette
 OUT_DIR  ?= ./bin
 
 GO       ?= go
@@ -27,7 +27,7 @@ MKDIR_P = mkdir -p
 # Help target: lists available targets with descriptions.
 # To add descriptions, append '## <desc>' to the target line.
 help: ## Show all available targets with descriptions
-	@echo "ig2wa Makefile — helpful targets"
+	@echo "Sniplette Makefile — helpful targets"
 	@echo
 	@echo "Variables:"
 	@echo "  BIN_NAME=$(BIN_NAME)  OUT_DIR=$(OUT_DIR)  GOFLAGS='$(GOFLAGS)'  BUILD_FLAGS='$(BUILD_FLAGS)'  CGO_ENABLED=$(CGO_ENABLED)"

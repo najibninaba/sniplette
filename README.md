@@ -1,12 +1,14 @@
-# ig2wa
+# Sniplette
 
-ig2wa is a small Go CLI tool that downloads Instagram and YouTube videos (including Reels/Shorts) and transcodes them into WhatsApp-friendly MP4 files. It orchestrates external tools (`yt-dlp` or `youtube-dl`, and `ffmpeg`) to fetch and encode content for sharing.
+Sniplette is a tiny video helper that turns large Instagram and YouTube videos into small, shareable clips. Give it a link, and Sniplette will fetch → transcode → compress → and hand you a neat little "snip" perfect for messaging apps, chats, and social platforms.
 
-- Preferred downloader: `yt-dlp` (fallback to `youtube-dl`)
-- Encoder: `ffmpeg`
-- Output defaults: H.264/AAC in MP4, 720p long side, ≤50 MB target, `yuv420p` for compatibility
-- Optional: audio-only extraction to `.m4a`
-- Captions saved alongside videos by default (`.txt`)
+### ✨ Features
+- 📥 Downloads from Instagram and YouTube using `yt-dlp`
+- 🎞️ Re-encodes with `ffmpeg` for consistent, mobile-friendly formats
+- 📦 Shrinks videos down to configurable size limits (e.g., 50 MB)
+- 📱 Ensures compatibility with messaging apps like WhatsApp, Telegram, and iMessage
+- 🖼️ Outputs clean MP4/H.264 (yuv420p) or lightweight audio/video variants
+- 🛠️ Simple, compact Go CLI
 
 This tool does not bypass authentication or DRM; it only works with publicly accessible URLs.
 
@@ -21,9 +23,9 @@ This tool does not bypass authentication or DRM; it only works with publicly acc
   - `yt-dlp` (preferred) or `youtube-dl`
   - `ffmpeg`
 
-ig2wa detects tools at startup:
+Sniplette detects tools at startup:
 1. If `--dl-binary` is provided, it uses that path/name.
-2. Else `IG2WA_DL_BINARY` env var.
+2. Else `SNIPLETTE_DL_BINARY` env var (with compatibility fallback to `IG2WA_DL_BINARY`).
 3. Else search `yt-dlp`, then `youtube-dl`.
 4. It must also find `ffmpeg`, otherwise it exits with a helpful message.
 
@@ -64,33 +66,80 @@ sudo pacman -S yt-dlp ffmpeg
 
 - Install `ffmpeg` with your package manager.
 - Install `yt-dlp` with your package manager or via `pip install -U yt-dlp`.
-- As a fallback, install `youtube-dl` if you can’t use `yt-dlp`.
+- As a fallback, install `youtube-dl` if you can't use `yt-dlp`.
 
 ## Build
 
 From the repository root:
 
 ```bash
-go build ./cmd/ig2wa
+go build ./cmd/sniplette
 ```
 
-This produces a `ig2wa` binary (or `ig2wa.exe` on Windows) in the current directory.
+This produces a `sniplette` binary (or `sniplette.exe` on Windows) in the current directory.
 
 To install into your `$GOBIN`:
 
 ```bash
-go install ./cmd/ig2wa
+go install ./cmd/sniplette
 ```
 
 ## Usage
 
-Basic syntax:
+Sniplette uses the Cobra framework with subcommands. You can run directly with a URL or use explicit subcommands:
 
 ```bash
-ig2wa <url> [<url> ...] [flags]
+# Direct run (no subcommand)
+sniplette <url> [<url> ...] [flags]
+
+# Run download/encode pipeline
+sniplette run <url> [<url> ...] [flags]
+
+# Show plan (metadata-only) without executing
+sniplette plan <url> [<url> ...] [flags]
+
+# Force TUI mode for interactive runs
+sniplette tui <url> [<url> ...] [flags]
+
+# Diagnose external dependencies
+sniplette doctor
+
+# Generate shell completion scripts
+sniplette completion [bash|zsh|fish|powershell]
 ```
 
-Core flags:
+## Commands
+
+- run
+  - Description: Execute the fetch/transcode pipeline for tiny, snack-sized snips.
+  - Usage: `sniplette run [urls...] [flags]`
+
+- plan
+  - Description: Show a tiny plan (metadata-only) without running encoder or writing outputs.
+  - Usage: `sniplette plan [urls...] [flags]`
+
+- tui
+  - Description: Force TUI mode for interactive snips (jobs, progress, etc.).
+  - Usage: `sniplette tui [urls...] [flags]`
+  - Notes: If stdout is not a terminal, this will error appropriately.
+
+- doctor
+  - Description: Diagnose external tools and show resolved paths.
+  - Usage: `sniplette doctor`
+  - Output example:
+    ```
+    Downloader: /usr/local/bin/yt-dlp
+    FFmpeg:    /opt/homebrew/bin/ffmpeg
+    ```
+
+- completion
+  - Description: Generate shell completion scripts.
+  - Usage: `sniplette completion [bash|zsh|fish|powershell]`
+
+## Flags
+
+Core flags (available for subcommands):
+
 - `-o, --out-dir string` Output directory (default: `.`)
 - `--max-size-mb int` Target max size per video in MB (default: 50; set 0 to use CRF/quality mode)
 - `--quality-preset string` Preset quality: `low`, `medium`, `high` (default: `medium`)
@@ -99,49 +148,60 @@ Core flags:
 - `--caption string` Caption output: `txt`, `none` (default: `txt`)
 - `--keep-temp` Keep intermediate download files
 - `--dl-binary string` Path or name for `yt-dlp`/`youtube-dl`
-- `--dry-run` Show plan without executing
 - `-v, --verbose` Show full subprocess commands/output
+- `--jobs int` Max concurrent jobs in TUI (default: 2)
 
 Quality presets mapping:
 - `low`: 540p, max-size-mb=20, crf=26
 - `medium` (default): 720p, max-size-mb=50, crf=22
 - `high`: 1080p, max-size-mb=100, crf=19
 
-Examples:
+## Examples
+
+Subcommand syntax:
 
 ```bash
-# Simple default (720p, ~50MB, caption saved)
-ig2wa https://www.instagram.com/reel/ABC123/
+# Explicit run
+sniplette run https://www.instagram.com/reel/ABC123/
 
-# Multiple URLs
-ig2wa https://www.instagram.com/reel/ABC123/ https://www.instagram.com/p/XYZ987/
+# Plan
+sniplette plan -v https://www.instagram.com/reel/ABC123/
 
-# High quality, larger size
-ig2wa --quality-preset high --max-size-mb 150 https://www.instagram.com/reel/ABC123/
+# Force TUI
+sniplette tui --jobs 4 https://www.instagram.com/reel/ABC123/ https://youtu.be/BBB
 
-# Force resolution override
-ig2wa --resolution 1080 https://www.instagram.com/reel/ABC123/
+# Dependency check
+sniplette doctor
 
-# Audio-only extraction
-ig2wa --audio-only https://www.instagram.com/reel/ABC123/
-
-# Dry-run preview (shows plan and computed bitrate)
-ig2wa --dry-run -v https://www.instagram.com/reel/ABC123/
-
-# Use a custom downloader path/name
-IG2WA_DL_BINARY=/usr/local/bin/yt-dlp ig2wa https://www.instagram.com/reel/ABC123/
-# or
-ig2wa --dl-binary /usr/local/bin/yt-dlp https://www.instagram.com/reel/ABC123/
-
-# YouTube video (short link)
-ig2wa https://youtu.be/XXXXXXXXXXX
-
-# YouTube video (full link)
-ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
-
-# Batch download from mixed sources
-ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB
+# Generate shell completion for zsh (see below to load)
+sniplette completion zsh
 ```
+
+## Shell Completion
+
+Load completions for your current shell:
+
+- Bash:
+  ```bash
+  source <(sniplette completion bash)
+  ```
+
+- Zsh:
+  ```bash
+  sniplette completion zsh > "${fpath[1]}/_sniplette"
+  ```
+
+- Fish:
+  ```bash
+  sniplette completion fish | source
+  ```
+
+- PowerShell:
+  ```powershell
+  sniplette completion powershell | Out-String | Invoke-Expression
+  ```
+
+You can persist these according to your shell's standard initialization configuration.
 
 ## Output Details
 
@@ -151,12 +211,12 @@ ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB
 - Scaling:
   - Vertical (height > width): `scale=-2:LONG_SIDE`
   - Horizontal: `scale=LONG_SIDE:-2`
-  - LONG_SIDE defaults to preset resolution (e.g., 720) or `--resolution`
-- In size-constrained mode (default), video bitrate is computed from duration and `--max-size-mb`.
-- In CRF mode (`--max-size-mb 0` or missing duration), use CRF from the preset (22 by default for `medium`).
+- Size/quality modes:
+  - Size-constrained (default): Computes bitrate from duration and `--max-size-mb` for compact results.
+  - CRF mode: Use `--max-size-mb 0` to switch to quality-based CRF encoding (preset CRFs: low=26, medium=22, high=19).
 
 Captions:
-- By default, the original caption is written to a `.txt` file next to the video.
+- By default, the original caption is written to a `.txt` file next to the snip.
 - Disable with `--caption none`.
 
 ## Exit Codes
@@ -171,7 +231,7 @@ Captions:
 
 Threads URLs are currently not supported.
 
-ig2wa relies on yt-dlp for metadata and media extraction. yt-dlp does not have a Threads (threads.net) extractor as of now, so attempts to download Threads posts fail. ig2wa detects Threads URLs and fails fast with a clear error instead of attempting a broken download.
+Sniplette relies on yt-dlp for metadata and media extraction. yt-dlp does not have a Threads (threads.net) extractor as of now, so attempts to download Threads posts fail. Sniplette detects Threads URLs and fails fast with a clear error instead of attempting a broken download.
 
 - Upstream issue: https://github.com/yt-dlp/yt-dlp/issues/7523
 - Workaround: Use Instagram or YouTube URLs.
@@ -179,8 +239,8 @@ ig2wa relies on yt-dlp for metadata and media extraction. yt-dlp does not have a
 
 ## Troubleshooting
 
-- "Could not find yt-dlp or youtube-dl": Install `yt-dlp` and ensure it’s in `PATH`, or pass `--dl-binary`.
-- "Could not find ffmpeg": Install `ffmpeg` and ensure it’s in `PATH`.
+- "Could not find yt-dlp or youtube-dl": Install `yt-dlp` and ensure it's in `PATH`, or pass `--dl-binary`.
+- "Could not find ffmpeg": Install `ffmpeg` and ensure it's in `PATH`.
 - Size slightly exceeds target: The bitrate calculation is approximate. Consider increasing `--max-size-mb`, lowering resolution, or switching to CRF mode.
 - Non-ASCII titles/usernames: Filenames are sanitized and truncated to safe, UTF‑8‑preserving names.
 
@@ -188,10 +248,10 @@ ig2wa relies on yt-dlp for metadata and media extraction. yt-dlp does not have a
 
 ```bash
 # From repo root
-go build ./cmd/ig2wa
+go build ./cmd/sniplette
 
 # Run
-./ig2wa --help
+./sniplette --help
 ```
 
 ## Legal/Ethical Note

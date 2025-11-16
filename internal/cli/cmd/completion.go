@@ -13,16 +13,16 @@ func newCompletionCmd() *cobra.Command {
 		Long: `To load completions:
 
 Bash:
-	source <(ig2wa completion bash)
+	source <(sniplette completion bash)
 
 Zsh:
-	ig2wa completion zsh > "${fpath[1]}/_ig2wa"
+	sniplette completion zsh > "${fpath[1]}/_sniplette"
 
 Fish:
-	ig2wa completion fish | source
+	sniplette completion fish | source
 
 PowerShell:
-	ig2wa completion powershell | Out-String | Invoke-Expression
+	sniplette completion powershell | Out-String | Invoke-Expression
 `,
 		DisableFlagsInUseLine: true,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},

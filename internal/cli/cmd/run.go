@@ -29,7 +29,7 @@ type runMode struct {
 func newRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "run [urls...]",
-		Short:         "Run download/encode pipeline",
+		Short:         "Run fetch/encode pipeline for tiny snips",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MinimumNArgs(1),
@@ -43,8 +43,8 @@ func newRunCmd() *cobra.Command {
 	}
 	// Bind same flags as root for explicit subcommand usage
 	bindRunFlags(cmd.Flags())
-	_ = cmd.Flags().MarkDeprecated("dry-run", "use 'ig2wa plan' instead")
-	_ = cmd.Flags().MarkDeprecated("no-ui", "use 'ig2wa tui' for interactive mode")
+	_ = cmd.Flags().MarkDeprecated("dry-run", "use 'sniplette plan' instead")
+	_ = cmd.Flags().MarkDeprecated("no-ui", "use 'sniplette tui' for interactive mode")
 	return cmd
 }
 
@@ -131,7 +131,9 @@ func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOp
 	}
 
 	if dlBinary == "" {
-		if v := os.Getenv("IG2WA_DL_BINARY"); v != "" {
+		if v := os.Getenv("SNIPLETTE_DL_BINARY"); v != "" {
+			dlBinary = v
+		} else if v := os.Getenv("IG2WA_DL_BINARY"); v != "" { // backward-compatibility fallback
 			dlBinary = v
 		}
 	}

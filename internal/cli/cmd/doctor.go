@@ -10,7 +10,7 @@ import (
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:           "doctor",
-		Short:         "Diagnose external dependencies (yt-dlp/youtube-dl, ffmpeg)",
+		Short:         "Diagnose external tools (yt-dlp/youtube-dl, ffmpeg)",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {

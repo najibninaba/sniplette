@@ -7,7 +7,7 @@ import (
 func newTuiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "tui [urls...]",
-		Short:         "Force TUI mode for interactive runs",
+		Short:         "Force TUI mode for interactive snips",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MinimumNArgs(1),

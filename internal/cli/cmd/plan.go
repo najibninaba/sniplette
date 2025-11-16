@@ -7,7 +7,7 @@ import (
 func newPlanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "plan [urls...]",
-		Short:         "Show plan (metadata-only) without executing",
+		Short:         "Show a tiny plan (metadata-only) without executing",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MinimumNArgs(1),

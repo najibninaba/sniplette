@@ -32,9 +32,9 @@ func (e *ExitError) Error() string {
 
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "ig2wa [urls...]",
-		Short:         "Instagram/YouTube to WhatsApp-friendly media",
-		Long:          "Download and encode Instagram/YouTube videos for WhatsApp sharing with size/quality presets.",
+		Use:           "sniplette [urls...]",
+		Short:         "Tiny video helper for snack-sized clips",
+		Long:          "Sniplette is a tiny video helper that turns large Instagram and YouTube videos into small, shareable clips. Give it a link, and Sniplette will fetch → transcode → compress → and hand you a neat little 'snip' perfect for messaging apps, chats, and social platforms.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.MinimumNArgs(1), // preserve current behavior: requires at least one URL
@@ -53,12 +53,12 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().String("dl-binary", "", "Path to yt-dlp or youtube-dl")
 	root.PersistentFlags().Int("jobs", 2, "Max concurrent jobs in TUI")
 
-	// Also bind run-specific flags on root, so `ig2wa <url>` continues to work.
+	// Also bind run-specific flags on root, so `sniplette <url>` continues to work.
 	bindRunFlags(root.Flags())
 
 	// Mark compatibility flags as deprecated but functional.
-	_ = root.Flags().MarkDeprecated("dry-run", "use 'ig2wa plan' instead")
-	_ = root.Flags().MarkDeprecated("no-ui", "use 'ig2wa tui' or keep using '--no-ui'")
+	_ = root.Flags().MarkDeprecated("dry-run", "use 'sniplette plan' instead")
+	_ = root.Flags().MarkDeprecated("no-ui", "use 'sniplette tui' or keep using '--no-ui'")
 
 	// Subcommands
 	root.AddCommand(newRunCmd())

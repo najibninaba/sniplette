@@ -12,49 +12,44 @@ This workspace is configured with RepoPrompt (RP) tools for enhanced development
 
 ## Overview
 
-ig2wa downloads videos from Instagram, YouTube, or Threads and transcodes them into WhatsApp-friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress.
+Sniplette downloads videos from Instagram or YouTube and transcodes them into compact, messaging‑app‑friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress—perfect for producing tiny, snack-sized snips for sharing.
 
 ## Build & Development Commands
 
 ```bash
 # Build the binary
-go build ./cmd/ig2wa
+go build ./cmd/sniplette
 
 # Install to $GOBIN
-go install ./cmd/ig2wa
+go install ./cmd/sniplette
 
 # Run directly
-go run ./cmd/ig2wa <instagram-url> [flags]
+go run ./cmd/sniplette <instagram-or-youtube-url> [flags]
 
 # Basic test run
-./ig2wa --dry-run https://www.instagram.com/reel/ABC123/
+./sniplette --dry-run https://www.instagram.com/reel/ABC123/
 ```
 
 ### Example
 
 ```bash
 # Instagram
-ig2wa https://www.instagram.com/reel/ABC123/
+sniplette https://www.instagram.com/reel/ABC123/
 
 # YouTube (short link)
-ig2wa https://youtu.be/XXXXXXXXXXX
+sniplette https://youtu.be/XXXXXXXXXXX
 
 # YouTube (full link)
-ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
-
-# Threads
-ig2wa https://www.threads.net/@username/post/POST_ID
+sniplette https://www.youtube.com/watch?v=YYYYYYYYYYY
 ```
 
 ## Architecture
 
 ### High-Level Flow
 
-1. **CLI Parsing** (`internal/cli/flags.go`): Parses command-line flags and validates URLs (Instagram: instagram.com, instagr.am; YouTube: youtube.com, youtu.be; Threads: threads.net)
-2. **Dependency Detection** (`cmd/ig2wa/main.go`): Locates `yt-dlp`/`youtube-dl` and `ffmpeg` in PATH
-3. **UI Mode Selection** (`cmd/ig2wa/main.go:40-52`):
-   - If stdout is a TTY and `--no-ui` not set → launches Bubble Tea TUI (`internal/ui/`)
-   - Otherwise → falls back to plain text output
+1. **CLI Parsing** (`internal/cli/cmd/root.go`, `internal/cli/cmd/run.go`): Parses flags and validates URLs (Instagram: instagram.com, instagr.am; YouTube: youtube.com, youtu.be; Threads currently unsupported)
+2. **Dependency Detection** (`internal/util/deps`): Locates `yt-dlp`/`youtube-dl` and `ffmpeg` in PATH
+3. **UI Mode Selection** (`internal/cli/cmd/run.go:isTerminal`, `internal/ui/`): If stdout is a TTY and `--no-ui` not set → launches Bubble Tea TUI; otherwise → plain text mode
 4. **Job Execution**:
    - **Download** (`internal/downloader/`): Fetches metadata and optionally downloads media via yt-dlp
    - **Encode** (`internal/encoder/`): Transcodes with ffmpeg using size-constrained bitrate or CRF mode
@@ -62,17 +57,14 @@ ig2wa https://www.threads.net/@username/post/POST_ID
 
 ### Package Structure
 
-- **`cmd/ig2wa/main.go`**: Entry point, dependency detection, orchestration of legacy text mode
-- **`internal/cli/`**: Flag parsing, URL validation, preset resolution
-- **`internal/downloader/`**: Wraps yt-dlp/youtube-dl; parses JSON metadata; handles progress parsing from download output
-- **`internal/encoder/`**: Wraps ffmpeg; computes bitrate from target size or uses CRF; parses ffmpeg's `-progress` output
-- **`internal/ui/`**: Bubble Tea TUI implementation
-  - `model.go`: TUI state machine, job orchestration, worker pool (default 2 concurrent jobs)
-  - `run.go`: Entry point for TUI mode
-  - `job.go`, `messages.go`, `view.go`, `styles.go`: UI rendering and message handling
-- **`internal/progress/`**: Shared progress reporting interface used by downloader/encoder to feed TUI
-- **`internal/model/`**: Core data structures (CLIOptions, DownloadedVideo, EncodeOptions, OutputVideo)
-- **`internal/util/`**: Helper utilities for running subprocesses, filesystem operations, filename sanitization
+- **`cmd/sniplette/main.go`**: Entry point
+- **`internal/cli/`**: Cobra commands, flag parsing, URL validation, preset resolution
+- **`internal/downloader/`**: Wraps yt-dlp/youtube-dl
+- **`internal/encoder/`**: Wraps ffmpeg
+- **`internal/ui/`**: Bubble Tea TUI (model, run, view, styles)
+- **`internal/progress/`**: Progress reporting interface
+- **`internal/model/`**: Core data structures
+- **`internal/util/`**: Subprocess, filesystem, filename sanitization helpers
 
 ### Encoding Modes
 
@@ -132,12 +124,35 @@ The codebase uses a `progress.Reporter` interface (`internal/progress/progress.g
 
 ### Quality Presets
 
-Defined in `internal/cli/flags.go:148-159`:
+Presets are applied in `internal/cli/cmd/run.go` via `presetDefaults`:
 - `low`: 540p, 20MB, CRF 26
 - `medium` (default): 720p, 50MB, CRF 22
 - `high`: 1080p, 100MB, CRF 19
 
 Resolution and max-size can be overridden individually via `--resolution` and `--max-size-mb`.
+
+### Shell Completion
+
+- Bash:
+  ```bash
+  source <(sniplette completion bash)
+  ```
+- Zsh:
+  ```bash
+  sniplette completion zsh > "${fpath[1]}/_sniplette"
+  ```
+- Fish:
+  ```bash
+  sniplette completion fish | source
+  ```
+- PowerShell:
+  ```powershell
+  sniplette completion powershell | Out-String | Invoke-Expression
+  ```
+
+### Environment Variable
+
+Primary env var: `SNIPLETTE_DL_BINARY` (with a compatibility fallback to `IG2WA_DL_BINARY` if the new var is unset).
 
 ### Filename Generation
 
@@ -152,17 +167,11 @@ Try a few URLs to verify:
 
 ```bash
 # Instagram
-ig2wa https://www.instagram.com/reel/ABC123/
+sniplette https://www.instagram.com/reel/ABC123/
 
 # YouTube short
-ig2wa https://youtu.be/XXXXXXXXXXX
+sniplette https://youtu.be/XXXXXXXXXXX
 
 # YouTube full
-ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
-
-# Threads
-ig2wa https://www.threads.net/@username/post/POST_ID
-
-# Mixed batch
-ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB
+sniplette https://www.youtube.com/watch?v=YYYYYYYYYYY
 ```
