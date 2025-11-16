@@ -92,9 +92,9 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 		resolution = presetRes
 	}
 	// If explicitly set to 0, CRF mode will be used; otherwise use provided max or preset.
-	if flagIsPresent(args, "--max-size-mb") && maxSizeMB == 0 {
+	if (flagIsPresent(args, "-max-size-mb") || flagIsPresent(args, "--max-size-mb")) && maxSizeMB == 0 {
 		// User asked to disable size mode
-	} else if !flagIsPresent(args, "--max-size-mb") {
+	} else if !(flagIsPresent(args, "-max-size-mb") || flagIsPresent(args, "--max-size-mb")) {
 		maxSizeMB = presetMaxMB
 	}
 
@@ -135,6 +135,7 @@ func ParseFlags(_ context.Context, args []string) (Parsed, error) {
 }
 
 func validateInstagramURL(raw string) error {
+	// Deprecated: unused in favor of util.DetectPlatform; retained for reference.
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("invalid URL: %q", raw)
@@ -160,9 +161,22 @@ func presetDefaults(p model.QualityPreset) (resolution int, maxSizeMB int, crf i
 }
 
 func flagIsPresent(args []string, name string) bool {
-	for _, a := range args {
-		if strings.HasPrefix(a, name) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == name || strings.HasPrefix(a, name+"=") {
 			return true
+		}
+		// Also accept the alternate dash form (- vs --)
+		if strings.HasPrefix(name, "--") {
+			alt := "-" + strings.TrimPrefix(name, "--")
+			if a == alt || strings.HasPrefix(a, alt+"=") {
+				return true
+			}
+		} else if strings.HasPrefix(name, "-") && !strings.HasPrefix(name, "--") {
+			alt := "--" + strings.TrimPrefix(name, "-")
+			if a == alt || strings.HasPrefix(a, alt+"=") {
+				return true
+			}
 		}
 	}
 	return false

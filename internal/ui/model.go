@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	bubblesprogress "github.com/charmbracelet/bubbles/progress"
@@ -15,6 +16,9 @@ import (
 	"ig2wa/internal/model"
 	"ig2wa/internal/progress"
 	"ig2wa/internal/util"
+	"ig2wa/internal/util/deps"
+	"ig2wa/internal/util/media"
+	"ig2wa/internal/pipeline"
 )
 
 type Model struct {
@@ -212,11 +216,11 @@ func (m Model) listenEventsCmd() tea.Cmd {
 
 func (m Model) checkDepsCmd() tea.Cmd {
 	return func() tea.Msg {
-		dl, derr := findDownloader(m.opts.DLBinary)
+		dl, derr := deps.FindDownloader(m.opts.DLBinary)
 		if derr != nil {
 			return depsCheckedMsg{Err: derr}
 		}
-		ff, ferr := findFFmpeg()
+		ff, ferr := deps.FindFFmpeg()
 		if ferr != nil {
 			return depsCheckedMsg{Err: ferr}
 		}
@@ -280,7 +284,7 @@ func (m Model) runJob(jobID, url string) {
 	}
 
 	// Plan encoding
-	targetLongSide, usedCRF := planResolutionAndCRF(m.opts, dv)
+	targetLongSide, usedCRF := pipeline.PlanResolutionAndCRF(m.opts, dv, pipeline.DefaultCRF(m.opts.Quality))
 	encOpts := model.EncodeOptions{
 		LongSidePx:       targetLongSide,
 		ModeCRF:          m.opts.MaxSizeMB == 0 || dv.DurationSec <= 0 || m.opts.AudioOnly,
@@ -300,7 +304,7 @@ func (m Model) runJob(jobID, url string) {
 	if m.opts.AudioOnly {
 		ext = ".m4a"
 	}
-	base := buildOutputBasename(dv, targetLongSide, m.opts.MaxSizeMB, encOpts)
+	base := media.OutputBasename(dv, targetLongSide, m.opts.MaxSizeMB, encOpts)
 	outputPath := filepath.Join(m.opts.OutDir, base+ext)
 
 	if m.opts.DryRun {
@@ -331,7 +335,7 @@ func (m Model) runJob(jobID, url string) {
 
 	// Caption
 	if m.opts.Caption == model.CaptionTxt {
-		caption := buildCaptionText(dv)
+		caption := media.CaptionText(dv)
 		if _, werr := util.WriteCaptionFile(out.OutputPath, caption); werr != nil && m.opts.Verbose {
 			rep.Log(progress.Log{JobID: jobID, Stream: progress.StreamStderr, Line: fmt.Sprintf("warning: failed to write caption: %v", werr)})
 		}
@@ -499,7 +503,7 @@ func max(a, b int) int {
 }
 
 func toID(i int, _ string) string {
-	return "job-" + itoa(i)
+	return "job-" + strconv.Itoa(i)
 }
 
 func itoa(i int) string {

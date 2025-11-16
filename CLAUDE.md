@@ -12,7 +12,7 @@ This workspace is configured with RepoPrompt (RP) tools for enhanced development
 
 ## Overview
 
-ig2wa downloads videos from Instagram or YouTube and transcodes them into WhatsApp-friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress.
+ig2wa downloads videos from Instagram, YouTube, or Threads and transcodes them into WhatsApp-friendly MP4 files using yt-dlp/youtube-dl and ffmpeg. It supports multiple URLs and provides a TUI for progress.
 
 ## Build & Development Commands
 
@@ -41,13 +41,16 @@ ig2wa https://youtu.be/XXXXXXXXXXX
 
 # YouTube (full link)
 ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
+
+# Threads
+ig2wa https://www.threads.net/@username/post/POST_ID
 ```
 
 ## Architecture
 
 ### High-Level Flow
 
-1. **CLI Parsing** (`internal/cli/flags.go`): Parses command-line flags and validates URLs (Instagram: instagram.com, instagr.am; YouTube: youtube.com, youtu.be)
+1. **CLI Parsing** (`internal/cli/flags.go`): Parses command-line flags and validates URLs (Instagram: instagram.com, instagr.am; YouTube: youtube.com, youtu.be; Threads: threads.net)
 2. **Dependency Detection** (`cmd/ig2wa/main.go`): Locates `yt-dlp`/`youtube-dl` and `ffmpeg` in PATH
 3. **UI Mode Selection** (`cmd/ig2wa/main.go:40-52`):
    - If stdout is a TTY and `--no-ui` not set → launches Bubble Tea TUI (`internal/ui/`)
@@ -156,6 +159,9 @@ ig2wa https://youtu.be/XXXXXXXXXXX
 
 # YouTube full
 ig2wa https://www.youtube.com/watch?v=YYYYYYYYYYY
+
+# Threads
+ig2wa https://www.threads.net/@username/post/POST_ID
 
 # Mixed batch
 ig2wa https://www.instagram.com/reel/AAA/ https://youtu.be/BBB

@@ -1,6 +1,6 @@
 # ig2wa
 
-ig2wa is a small Go CLI tool that downloads Instagram or YouTube videos (including Reels/Shorts) and transcodes them into WhatsApp-friendly MP4 files. It orchestrates external tools (`yt-dlp` or `youtube-dl`, and `ffmpeg`) to fetch and encode content for sharing.
+ig2wa is a small Go CLI tool that downloads Instagram and YouTube videos (including Reels/Shorts) and transcodes them into WhatsApp-friendly MP4 files. It orchestrates external tools (`yt-dlp` or `youtube-dl`, and `ffmpeg`) to fetch and encode content for sharing.
 
 - Preferred downloader: `yt-dlp` (fallback to `youtube-dl`)
 - Encoder: `ffmpeg`
@@ -166,6 +166,16 @@ Captions:
 - `2` missing dependency (`yt-dlp`/`youtube-dl` or `ffmpeg`)
 - `3` download error
 - `4` transcode error
+
+## Threads Support
+
+Threads URLs are currently not supported.
+
+ig2wa relies on yt-dlp for metadata and media extraction. yt-dlp does not have a Threads (threads.net) extractor as of now, so attempts to download Threads posts fail. ig2wa detects Threads URLs and fails fast with a clear error instead of attempting a broken download.
+
+- Upstream issue: https://github.com/yt-dlp/yt-dlp/issues/7523
+- Workaround: Use Instagram or YouTube URLs.
+- Future: We may add an experimental native Threads extractor in the tool if there is sufficient demand.
 
 ## Troubleshooting
 

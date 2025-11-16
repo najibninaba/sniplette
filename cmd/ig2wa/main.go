@@ -14,6 +14,9 @@ import (
 	"ig2wa/internal/encoder"
 	"ig2wa/internal/model"
 	"ig2wa/internal/util"
+	"ig2wa/internal/util/deps"
+	"ig2wa/internal/util/media"
+	"ig2wa/internal/pipeline"
 
 	"ig2wa/internal/ui"
 	"golang.org/x/term"
@@ -48,17 +51,17 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(ExitCLIError)
 		}
-	os.Exit(ExitOK)
+		os.Exit(ExitOK)
 	}
 
 	// Non-UI fallback (legacy textual flow)
 	// Dependency detection
-	downloaderPath, derr := findDownloader(parsed.Options.DLBinary)
+	downloaderPath, derr := deps.FindDownloader(parsed.Options.DLBinary)
 	if derr != nil {
 		fmt.Fprintln(os.Stderr, derr)
 		os.Exit(ExitMissingDep)
 	}
-	ffmpegPath, ferr := findFFmpeg()
+	ffmpegPath, ferr := deps.FindFFmpeg()
 	if ferr != nil {
 		fmt.Fprintln(os.Stderr, ferr)
 		os.Exit(ExitMissingDep)
@@ -121,7 +124,7 @@ func processOne(ctx context.Context, rawURL string, parsed cli.Parsed, dlPath, f
 	}
 
 	// Plan encoding
-	targetLongSide, crf := planResolutionAndCRF(parsed.Options, dv, parsed.PresetCRF)
+	targetLongSide, crf := pipeline.PlanResolutionAndCRF(parsed.Options, dv, parsed.PresetCRF)
 	encOpts := model.EncodeOptions{
 		LongSidePx:       targetLongSide,
 		ModeCRF:          parsed.Options.MaxSizeMB == 0 || dv.DurationSec <= 0 || parsed.Options.AudioOnly,
@@ -137,7 +140,7 @@ func processOne(ctx context.Context, rawURL string, parsed cli.Parsed, dlPath, f
 	}
 
 	// Build output filename
-	base := buildOutputBasename(dv, targetLongSide, parsed.Options.MaxSizeMB, encOpts)
+	base := media.OutputBasename(dv, targetLongSide, parsed.Options.MaxSizeMB, encOpts)
 	ext := ".mp4"
 	if parsed.Options.AudioOnly {
 		ext = ".m4a"
@@ -162,7 +165,7 @@ func processOne(ctx context.Context, rawURL string, parsed cli.Parsed, dlPath, f
 
 	// Write caption if requested and available
 	if parsed.Options.Caption == model.CaptionTxt {
-		caption := buildCaptionText(dv)
+		caption := media.CaptionText(dv)
 		if _, werr := util.WriteCaptionFile(out.OutputPath, caption); werr != nil {
 			// Non-fatal: just warn
 			fmt.Fprintf(os.Stderr, "warning: failed to write caption: %v\n", werr)

@@ -17,6 +17,17 @@ import (
 	"ig2wa/internal/util"
 )
 
+var ErrThreadsUnsupported = errors.New("threads not supported (yt-dlp has no extractor)")
+
+func isThreadsURL(raw string) bool {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if i := strings.Index(s, "://"); i != -1 {
+		s = s[i+3:]
+	}
+	s = strings.TrimPrefix(s, "www.")
+	return strings.HasPrefix(s, "threads.net/") || strings.HasPrefix(s, "threads.com/")
+}
+
 // Options controls downloader behavior.
 type Options struct {
 	DownloaderPath string // Path to yt-dlp or youtube-dl
@@ -50,8 +61,19 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		})
 	}
 
+	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
+	if isThreadsURL(url) {
+		return model.DownloadedVideo{}, workdir, ErrThreadsUnsupported
+	}
+
+	// Normalize URL for yt-dlp (e.g., threads.com -> threads.net for Threads)
+	normURL := url
+	if pl, _, derr := util.DetectPlatform(url); derr == nil {
+		normURL = util.NormalizeURL(url, pl)
+	}
+
 	// First: get metadata as JSON
-	info, err := fetchMetadata(ctx, opts, url)
+	info, err := fetchMetadata(ctx, opts, normURL)
 	if err != nil {
 		return model.DownloadedVideo{}, workdir, err
 	}
@@ -82,7 +104,7 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 	if opts.Reporter != nil {
 		args = append(args, "--newline")
 	}
-	args = append(args, url)
+	args = append(args, normURL)
 
 	if opts.Reporter != nil {
 		opts.Reporter.Update(progress.Update{
@@ -98,6 +120,19 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		Args:    args,
 		Dir:     workdir,
 		Verbose: opts.Verbose && opts.Reporter == nil,
+		StdoutLine: func(line string) {
+			if opts.Reporter == nil {
+				return
+			}
+			// Forward raw logs in verbose mode
+			if opts.Verbose {
+				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStdout, Line: line})
+			}
+			// Try to parse progress lines (yt-dlp --newline commonly writes progress to stdout)
+			if u, ok := parseYTDLPProgress(line, opts.JobID); ok {
+				opts.Reporter.Update(u)
+			}
+		},
 		StderrLine: func(line string) {
 			if opts.Reporter == nil {
 				return
@@ -155,11 +190,22 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 }
 
 func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, error) {
+	// Normalize URL for yt-dlp compatibility
+	normURL := url
+	if pl, _, err := util.DetectPlatform(url); err == nil {
+		normURL = util.NormalizeURL(url, pl)
+	}
+
+	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
+	if isThreadsURL(url) || isThreadsURL(normURL) {
+		return YTDLPInfo{}, ErrThreadsUnsupported
+	}
+
 	args := []string{
 		"--dump-json",
 		"-f", "bestvideo+bestaudio/best",
 		"--no-playlist",
-		url,
+		normURL,
 	}
 	res, runErr := util.Run(ctx, util.CmdSpec{
 		Path:    opts.DownloaderPath,
@@ -173,6 +219,10 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 		},
 	})
 	if runErr != nil && len(res.Stdout) == 0 {
+		msg := strings.ToLower(runErr.Error())
+		if strings.Contains(msg, "unsupported url") && (strings.Contains(msg, "threads.net") || strings.Contains(msg, "threads.com")) {
+			return YTDLPInfo{}, ErrThreadsUnsupported
+		}
 		return YTDLPInfo{}, fmt.Errorf("metadata fetch failed: %w", runErr)
 	}
 
