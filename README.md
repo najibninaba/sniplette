@@ -73,15 +73,15 @@ sudo pacman -S yt-dlp ffmpeg
 From the repository root:
 
 ```bash
-go build ./cmd/sniplette
+make build
 ```
 
-This produces a `sniplette` binary (or `sniplette.exe` on Windows) in the current directory.
+This produces a `sniplette` binary in the `./bin` directory.
 
 To install into your `$GOBIN`:
 
 ```bash
-go install ./cmd/sniplette
+make install
 ```
 
 ## Usage
