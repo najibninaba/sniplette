@@ -7,8 +7,8 @@
 *.test
 
 # Root-level binaries (from go build without -o flag)
-/ig2wa
-/ig2wa-*
+/sniplette
+/sniplette-*
 
 # Build outputs
 /build/
