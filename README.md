@@ -260,4 +260,4 @@ This tool should only be used to download videos you're allowed to (your own con
 
 ## License
 
-Copyright © 2025. See repository for license information (if/when added).
+MIT License - Copyright © 2025
