@@ -84,6 +84,48 @@ To install into your `$GOBIN`:
 make install
 ```
 
+## Configuration
+
+Sniplette supports a configuration file and environment variables via Viper.
+
+- Config formats: `yaml`, `yml`, `json`, `toml` (loaded as `config.{yaml|yml|json|toml}`)
+- Config search path:
+  - Linux: `$XDG_CONFIG_HOME/sniplette/config.{yaml|yml|json|toml}` (default: `~/.config/sniplette/`)
+  - macOS: `~/Library/Application Support/sniplette/config.{yaml|yml|json|toml}`
+  - Windows: `%AppData%/sniplette/config.{yaml|yml|json|toml}`
+- Environment variables:
+  - Prefix: `SNIPLETTE_`
+  - Hyphens in keys convert to underscores for env vars (e.g., `out-dir` → `SNIPLETTE_OUT_DIR`)
+- Precedence:
+  - CLI flags > environment variables > config file > defaults
+
+Supported configuration keys (in config file and env):
+- `out_dir` (or `out-dir`)
+- `verbose`
+- `dl_binary` (or `dl-binary`)
+- `jobs`
+
+Example `config.yaml`:
+
+```yaml
+# ~/.config/sniplette/config.yaml (Linux)
+# ~/Library/Application Support/sniplette/config.yaml (macOS)
+# %AppData%/sniplette/config.yaml (Windows)
+
+out_dir: "/home/user/Videos/sniplette"
+verbose: true
+dl_binary: "yt-dlp"   # or a full path like /usr/local/bin/yt-dlp
+jobs: 4
+```
+
+Environment variable examples:
+```bash
+export SNIPLETTE_OUT_DIR="$HOME/Videos/sniplette"
+export SNIPLETTE_DL_BINARY="/usr/local/bin/yt-dlp"
+export SNIPLETTE_JOBS=4
+export SNIPLETTE_VERBOSE=true
+```
+
 ## Usage
 
 Sniplette uses the Cobra framework with subcommands. You can run directly with a URL or use explicit subcommands:
