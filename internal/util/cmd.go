@@ -179,3 +179,22 @@ func quote(s string) string {
 	}
 	return s
 }
+
+// CmdRunner is an interface for running external commands.
+// It allows dependency injection and mocking in tests.
+type CmdRunner interface {
+	Run(ctx context.Context, spec CmdSpec) (CmdResult, error)
+}
+
+// DefaultRunner is the default implementation of CmdRunner that uses the existing Run function.
+type DefaultRunner struct{}
+
+// Run executes the command using the package-level Run function.
+func (DefaultRunner) Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
+	return Run(ctx, spec)
+}
+
+// NewDefaultRunner returns a new DefaultRunner instance.
+func NewDefaultRunner() CmdRunner {
+	return DefaultRunner{}
+}

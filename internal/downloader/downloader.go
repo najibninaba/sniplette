@@ -38,6 +38,9 @@ type Options struct {
 	// Progress reporting (optional)
 	Reporter progress.Reporter
 	JobID    string
+
+	// Runner is optional; if nil, defaults to util.NewDefaultRunner()
+	Runner util.CmdRunner
 }
 
 // Download fetches metadata (and optionally downloads the media) for a given URL.
@@ -59,6 +62,12 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 			Percent: -1,
 			Message: "Fetching metadata",
 		})
+	}
+
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
 	}
 
 	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
@@ -115,7 +124,7 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		})
 	}
 
-	_, runErr := util.Run(ctx, util.CmdSpec{
+	_, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:    opts.DownloaderPath,
 		Args:    args,
 		Dir:     workdir,
@@ -201,13 +210,19 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 		return YTDLPInfo{}, ErrThreadsUnsupported
 	}
 
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
+	}
+
 	args := []string{
 		"--dump-json",
 		"-f", "bestvideo+bestaudio/best",
 		"--no-playlist",
 		normURL,
 	}
-	res, runErr := util.Run(ctx, util.CmdSpec{
+	res, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:    opts.DownloaderPath,
 		Args:    args,
 		Verbose: opts.Verbose && opts.Reporter == nil,

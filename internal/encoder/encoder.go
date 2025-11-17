@@ -12,6 +12,7 @@ import (
 	"ig2wa/internal/model"
 	"ig2wa/internal/progress"
 	"ig2wa/internal/util"
+	"ig2wa/internal/util/bitrate"
 )
 
 // Options control ffmpeg execution.
@@ -23,6 +24,9 @@ type Options struct {
 	// Progress reporting (optional)
 	Reporter progress.Reporter
 	JobID    string
+
+	// Runner is optional; if nil, defaults to util.NewDefaultRunner()
+	Runner util.CmdRunner
 }
 
 // Encode performs the transcoding according to the provided options.
@@ -38,6 +42,12 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 		return encodeAudioOnly(ctx, in.InputPath, opts, enc)
 	}
 
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
+	}
+
 	vf, _ := scaleFilter(enc.LongSidePx, in.Width, in.Height)
 	args := []string{
 		"-y",
@@ -48,7 +58,7 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 		"-profile:v", valueOr(enc.Profile, "main"),
 		"-pix_fmt", "yuv420p",
 		"-c:a", "aac",
-		"-b:a", fmt.Sprintf("%dk", safeAudioKbps(enc.AudioBitrateKbps)),
+		"-b:a", fmt.Sprintf("%dk", bitrate.SafeAudioKbps(enc.AudioBitrateKbps)),
 		"-movflags", "+faststart",
 	}
 	if enc.KeyInt > 0 {
@@ -65,7 +75,7 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 		if in.DurationSec <= 0 || enc.MaxSizeMB <= 0 {
 			return model.OutputVideo{}, errors.New("invalid bitrate mode inputs: missing duration or max size")
 		}
-		kbps := computeVideoBitrateKbps(enc.MaxSizeMB, in.DurationSec, safeAudioKbps(enc.AudioBitrateKbps), enc.VideoMinKbps, enc.VideoMaxKbps)
+		kbps := bitrate.ComputeVideoKbps(enc.MaxSizeMB, in.DurationSec, bitrate.SafeAudioKbps(enc.AudioBitrateKbps), enc.VideoMinKbps, enc.VideoMaxKbps)
 		usedVBR = kbps
 		args = append(args, "-b:v", fmt.Sprintf("%dk", kbps))
 	}
@@ -99,7 +109,7 @@ func Encode(ctx context.Context, in model.DownloadedVideo, enc model.EncodeOptio
 	var speedStr string
 	var totalSize int64
 
-	_, runErr := util.Run(ctx, util.CmdSpec{
+	_, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:    opts.FFmpegPath,
 		Args:    args,
 		Verbose: opts.Verbose && opts.Reporter == nil,
@@ -223,6 +233,11 @@ func encodeAudioOnly(ctx context.Context, inputPath string, opts Options, enc mo
 	if inputPath == "" {
 		return model.OutputVideo{}, errors.New("input path is required")
 	}
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
+	}
 	args := []string{
 		"-y",
 		"-i", inputPath,
@@ -252,7 +267,7 @@ func encodeAudioOnly(ctx context.Context, inputPath string, opts Options, enc mo
 	var speedStr string
 	var totalSize int64
 
-	_, runErr := util.Run(ctx, util.CmdSpec{
+	_, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:          opts.FFmpegPath,
 		Args:          args,
 		Verbose:       opts.Verbose && opts.Reporter == nil,

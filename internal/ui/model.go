@@ -19,6 +19,7 @@ import (
 	"ig2wa/internal/util/deps"
 	"ig2wa/internal/util/media"
 	"ig2wa/internal/pipeline"
+	"ig2wa/internal/util/format"
 )
 
 type Model struct {
@@ -158,7 +159,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Set informative status with basename and size
 				if r.OutputPath != "" {
 					name := filepath.Base(r.OutputPath)
-					size := humanizeBytes(r.Bytes)
+					size := format.HumanizeBytes(r.Bytes)
 					if m.opts.DryRun {
 						js.status = fmt.Sprintf("Planned: %s (%s)", name, size)
 					} else {
@@ -343,7 +344,7 @@ func (m Model) runJob(jobID, url string) {
 
 	// Send final update with filename before result
 	name := filepath.Base(out.OutputPath)
-	size := humanizeBytes(out.Bytes)
+	size := format.HumanizeBytes(out.Bytes)
 	rep.Update(progress.Update{
 		JobID:   jobID,
 		Stage:   progress.StageCompleted,
