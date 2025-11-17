@@ -7,10 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
-	"time"
 
 	"ig2wa/internal/model"
 	"ig2wa/internal/progress"
@@ -38,10 +35,11 @@ type Options struct {
 	// Progress reporting (optional)
 	Reporter progress.Reporter
 	JobID    string
+
+	// Runner is optional; if nil, defaults to util.NewDefaultRunner()
+	Runner util.CmdRunner
 }
 
-// Download fetches metadata (and optionally downloads the media) for a given URL.
-// Returns the DownloadedVideo and the temp workdir used (for caller to cleanup).
 func Download(ctx context.Context, url string, opts Options) (model.DownloadedVideo, string, error) {
 	if opts.DownloaderPath == "" {
 		return model.DownloadedVideo{}, "", errors.New("downloader path is required")
@@ -59,6 +57,12 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 			Percent: -1,
 			Message: "Fetching metadata",
 		})
+	}
+
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
 	}
 
 	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
@@ -115,7 +119,7 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		})
 	}
 
-	_, runErr := util.Run(ctx, util.CmdSpec{
+	_, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:    opts.DownloaderPath,
 		Args:    args,
 		Dir:     workdir,
@@ -128,8 +132,8 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 			if opts.Verbose {
 				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStdout, Line: line})
 			}
-			// Try to parse progress lines (yt-dlp --newline commonly writes progress to stdout)
-			if u, ok := parseYTDLPProgress(line, opts.JobID); ok {
+			// Use extracted parser
+			if u, ok := ParseProgress(line, opts.JobID); ok {
 				opts.Reporter.Update(u)
 			}
 		},
@@ -141,8 +145,8 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 			if opts.Verbose {
 				opts.Reporter.Log(progress.Log{JobID: opts.JobID, Stream: progress.StreamStderr, Line: line})
 			}
-			// Try to parse progress lines
-			if u, ok := parseYTDLPProgress(line, opts.JobID); ok {
+			// Use extracted parser
+			if u, ok := ParseProgress(line, opts.JobID); ok {
 				opts.Reporter.Update(u)
 			}
 		},
@@ -151,30 +155,11 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		return model.DownloadedVideo{}, workdir, fmt.Errorf("downloader failed: %w", runErr)
 	}
 
-	// Resolve actual downloaded path(s)
-	candidates, globErr := filepath.Glob(filepath.Join(workdir, info.ID+".*"))
-	if globErr != nil {
-		return model.DownloadedVideo{}, workdir, fmt.Errorf("resolve download: %w", globErr)
+	// Resolve actual downloaded path via helper
+	input, selErr := SelectDownloadedFile(workdir, info.ID)
+	if selErr != nil {
+		return model.DownloadedVideo{}, workdir, fmt.Errorf("select downloaded file: %w", selErr)
 	}
-	if len(candidates) == 0 {
-		// fallback: try find any file in workdir
-		all, _ := filepath.Glob(filepath.Join(workdir, "*"))
-		if len(all) == 0 {
-			return model.DownloadedVideo{}, workdir, errors.New("download succeeded but no output file found")
-		}
-		candidates = all
-	}
-
-	// Prefer common playable containers/extensions
-	sort.SliceStable(candidates, func(i, j int) bool {
-		pri := extPriority(filepath.Ext(candidates[i]))
-		prj := extPriority(filepath.Ext(candidates[j]))
-		if pri == prj {
-			return candidates[i] < candidates[j]
-		}
-		return pri < prj
-	})
-	input := candidates[0]
 
 	return model.DownloadedVideo{
 		InputPath:   input,
@@ -201,13 +186,19 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 		return YTDLPInfo{}, ErrThreadsUnsupported
 	}
 
+	// Initialize runner with default if nil
+	runner := opts.Runner
+	if runner == nil {
+		runner = util.NewDefaultRunner()
+	}
+
 	args := []string{
 		"--dump-json",
 		"-f", "bestvideo+bestaudio/best",
 		"--no-playlist",
 		normURL,
 	}
-	res, runErr := util.Run(ctx, util.CmdSpec{
+	res, runErr := runner.Run(ctx, util.CmdSpec{
 		Path:    opts.DownloaderPath,
 		Args:    args,
 		Verbose: opts.Verbose && opts.Reporter == nil,
@@ -254,104 +245,8 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 	return info, nil
 }
 
-func extPriority(ext string) int {
-	e := strings.ToLower(strings.TrimPrefix(ext, "."))
-	switch e {
-	case "mp4":
-		return 0
-	case "mkv":
-		return 1
-	case "webm":
-		return 2
-	case "mov":
-		return 3
-	default:
-		return 9
-	}
-}
-
 // CleanupWorkdir removes the given temp workdir (best-effort).
 // Not strictly required but useful if a caller wants explicit cleanup here.
 func CleanupWorkdir(dir string) {
 	_ = os.RemoveAll(dir)
-}
-
-func parseYTDLPProgress(line, jobID string) (u progress.Update, ok bool) {
-	u = progress.Update{
-		JobID:   jobID,
-		Percent: -1,
-		Message: "",
-		Stage:   progress.StageDownloading,
-	}
-	if strings.Contains(line, "[download]") {
-		u.Message = "Downloading"
-		// crude percent parsing: find first token containing '%'
-		fields := strings.Fields(line)
-		for _, f := range fields {
-			if strings.Contains(f, "%") {
-				p := strings.TrimSuffix(strings.TrimSpace(f), "%")
-				if p != "" {
-					if v, err := strconv.ParseFloat(strings.TrimSpace(p), 64); err == nil {
-						u.Percent = v
-						break
-					}
-				}
-			}
-		}
-		// speed: look for " at <speed>" pattern
-		if i := strings.Index(line, " at "); i != -1 {
-			rest := strings.TrimSpace(line[i+4:])
-			if rest != "" {
-				sp := strings.Fields(rest)
-				if len(sp) > 0 {
-					speed := sp[0]
-					u.Speed = &speed
-				}
-			}
-		}
-		// ETA parsing
-		if j := strings.Index(line, " ETA "); j != -1 {
-			rest := strings.TrimSpace(line[j+5:])
-			if rest != "" {
-				token := strings.Fields(rest)
-				if len(token) > 0 {
-					if d, err := parseETA(token[0]); err == nil {
-						u.ETA = &d
-					}
-				}
-			}
-		}
-		return u, true
-	}
-	if strings.Contains(line, "Merging formats") || strings.Contains(line, "[Merger]") {
-		u.Stage = progress.StageMerging
-		u.Message = "Merging"
-		u.Percent = -1
-		return u, true
-	}
-	return u, false
-}
-
-func parseETA(s string) (time.Duration, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) == 2 {
-		// mm:ss
-		min, err1 := strconv.Atoi(parts[0])
-		sec, err2 := strconv.Atoi(parts[1])
-		if err1 != nil || err2 != nil {
-			return 0, fmt.Errorf("invalid ETA %q", s)
-		}
-		return time.Duration(min)*time.Minute + time.Duration(sec)*time.Second, nil
-	}
-	if len(parts) == 3 {
-		// hh:mm:ss
-		hr, err1 := strconv.Atoi(parts[0])
-		min, err2 := strconv.Atoi(parts[1])
-		sec, err3 := strconv.Atoi(parts[2])
-		if err1 != nil || err2 != nil || err3 != nil {
-			return 0, fmt.Errorf("invalid ETA %q", s)
-		}
-		return time.Duration(hr)*time.Hour + time.Duration(min)*time.Minute + time.Duration(sec)*time.Second, nil
-	}
-	return 0, fmt.Errorf("invalid ETA %q", s)
 }

@@ -17,6 +17,7 @@ import (
 	"ig2wa/internal/pipeline"
 	"ig2wa/internal/ui"
 	"ig2wa/internal/util"
+	"ig2wa/internal/util/bitrate"
 	"ig2wa/internal/util/deps"
 	"ig2wa/internal/util/media"
 )
@@ -343,22 +344,9 @@ func printPlan(rawURL, dlPath, ffmpegPath, tempDir, outputPath string, dv model.
 }
 
 func bitrateForPreview(maxSizeMB int, durationSec float64, audioKbps, vMin, vMax int) int {
-	if durationSec <= 0 {
-		return clamp(2000, vMin, vMax)
-	}
-	targetSizeBytes := int64(maxSizeMB) * 1024 * 1024
-	totalBitrateBps := float64(targetSizeBytes*8) / durationSec
-	videoBitrateBps := totalBitrateBps - float64(audioKbps*1000)
-	kbps := int(videoBitrateBps / 1000.0)
-	return clamp(kbps, vMin, vMax)
+	return bitrate.ComputeVideoKbps(maxSizeMB, durationSec, audioKbps, vMin, vMax)
 }
 
 func clamp(v, min, max int) int {
-	if min != 0 && v < min {
-		return min
-	}
-	if max != 0 && v > max {
-		return max
-	}
-	return v
+	return bitrate.Clamp(v, min, max)
 }
