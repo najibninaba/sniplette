@@ -4,9 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+
+	"ig2wa/internal/config"
 )
 
 const (
@@ -47,8 +51,11 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
+	// Default output directory is current directory for better UX
+	defaultOut := "."
+
 	// Persistent flags available to all subcommands
-	root.PersistentFlags().StringP("out-dir", "o", ".", "Output directory")
+	root.PersistentFlags().StringP("out-dir", "o", defaultOut, "Output directory")
 	root.PersistentFlags().BoolP("verbose", "v", false, "Show full subprocess commands/output")
 	root.PersistentFlags().String("dl-binary", "", "Path to yt-dlp or youtube-dl")
 	root.PersistentFlags().Int("jobs", 2, "Max concurrent jobs in TUI")
@@ -66,6 +73,9 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newTuiCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newCompletionCmd())
+
+	// Initialize Viper configuration (env, config file, and defaults)
+	_ = config.Init(root)
 
 	return root
 }
@@ -89,11 +99,43 @@ func Execute(ctx context.Context) error {
 
 // Helpers
 func getPersistentString(cmd *cobra.Command, name, def string) string {
-	v, err := cmd.InheritedFlags().GetString(name)
-	if err != nil || v == "" {
-		return def
+	// Flag value takes precedence if explicitly set
+	if f := cmd.InheritedFlags().Lookup(name); f != nil && f.Changed {
+		v, _ := cmd.InheritedFlags().GetString(name)
+		if v != "" {
+			return v
+		}
 	}
-	return v
+	// Then environment/config via Viper
+	key := strings.ReplaceAll(name, "-", "_")
+	if v := viper.GetString(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func getPersistentBool(cmd *cobra.Command, name string, def bool) bool {
+	if f := cmd.InheritedFlags().Lookup(name); f != nil && f.Changed {
+		v, _ := cmd.InheritedFlags().GetBool(name)
+		return v
+	}
+	key := strings.ReplaceAll(name, "-", "_")
+	if viper.IsSet(key) {
+		return viper.GetBool(key)
+	}
+	return def
+}
+
+func getPersistentInt(cmd *cobra.Command, name string, def int) int {
+	if f := cmd.InheritedFlags().Lookup(name); f != nil && f.Changed {
+		v, _ := cmd.InheritedFlags().GetInt(name)
+		return v
+	}
+	key := strings.ReplaceAll(name, "-", "_")
+	if viper.IsSet(key) {
+		return viper.GetInt(key)
+	}
+	return def
 }
 
 func ensureDir(path string) error {

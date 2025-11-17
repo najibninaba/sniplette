@@ -73,14 +73,12 @@ func runPreRun(cmd *cobra.Command, args []string) error {
 }
 
 func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOptions, int, error) {
-	// Persistent flags
-	outDir, _ := cmd.InheritedFlags().GetString("out-dir")
-	if outDir == "" {
-		outDir = "."
-	}
-	verbose, _ := cmd.InheritedFlags().GetBool("verbose")
-	dlBinary, _ := cmd.InheritedFlags().GetString("dl-binary")
-	jobs, _ := cmd.InheritedFlags().GetInt("jobs")
+	// Persistent flags with precedence: flag > env/config > default
+	defaultOut := "."
+	outDir := getPersistentString(cmd, "out-dir", defaultOut)
+	verbose := getPersistentBool(cmd, "verbose", false)
+	dlBinary := getPersistentString(cmd, "dl-binary", "")
+	jobs := getPersistentInt(cmd, "jobs", 2)
 	if jobs <= 0 {
 		jobs = 2
 	}

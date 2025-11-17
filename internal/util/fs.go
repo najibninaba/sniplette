@@ -6,11 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"ig2wa/internal/dirs"
 )
 
-// MakeTempWorkdir creates a unique temp directory under $TMPDIR/ig2wa.
+// MakeTempWorkdir creates a unique temp directory under the app cache dir.
 func MakeTempWorkdir(prefix string) (string, error) {
-	base := filepath.Join(os.TempDir(), "ig2wa")
+	base, err := dirs.TempBaseDir()
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return "", err
 	}
