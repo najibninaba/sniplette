@@ -32,6 +32,8 @@ type CLIOptions struct {
 
 	NoUI bool // Disable TUI when true
 	Jobs int  // Max concurrent jobs for TUI
+
+	CookiesFromBrowser string // e.g., "brave", "chrome:Default", "firefox"
 }
 
 // DownloadedVideo represents the media and metadata returned by the downloader.

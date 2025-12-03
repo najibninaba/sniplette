@@ -264,12 +264,13 @@ func (m Model) runJob(jobID, url string) {
 
 	// Step 1: Download metadata (or full if not dry-run)
 	dv, tempDir, derr := downloader.Download(m.ctx, url, downloader.Options{
-		DownloaderPath: m.downloaderPath,
-		Verbose:        m.opts.Verbose,
-		KeepTemp:       m.opts.KeepTemp,
-		MetadataOnly:   m.opts.DryRun,
-		Reporter:       rep,
-		JobID:          jobID,
+		DownloaderPath:     m.downloaderPath,
+		Verbose:            m.opts.Verbose,
+		KeepTemp:           m.opts.KeepTemp,
+		MetadataOnly:       m.opts.DryRun,
+		Reporter:           rep,
+		JobID:              jobID,
+		CookiesFromBrowser: m.opts.CookiesFromBrowser,
 	})
 	// Cleanup unless keep-temp
 	defer func() {

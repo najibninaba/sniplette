@@ -59,6 +59,10 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolP("verbose", "v", false, "Show full subprocess commands/output")
 	root.PersistentFlags().String("dl-binary", "", "Path to yt-dlp or youtube-dl")
 	root.PersistentFlags().Int("jobs", 2, "Max concurrent jobs in TUI")
+	root.PersistentFlags().String("cookies-from-browser", "", "Import cookies from browser (e.g., 'brave', 'chrome:Default', 'firefox')")
+
+	// Bind cookies-from-browser to viper for config/env support
+	_ = viper.BindPFlag("cookies_from_browser", root.PersistentFlags().Lookup("cookies-from-browser"))
 
 	// Also bind run-specific flags on root, so `sniplette <url>` continues to work.
 	bindRunFlags(root.Flags())

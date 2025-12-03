@@ -18,6 +18,7 @@ import (
 )
 
 var ErrThreadsUnsupported = errors.New("threads not supported (yt-dlp has no extractor)")
+var ErrAuthRequired = errors.New("authentication required")
 
 func isThreadsURL(raw string) bool {
 	s := strings.ToLower(strings.TrimSpace(raw))
@@ -38,6 +39,17 @@ type Options struct {
 	// Progress reporting (optional)
 	Reporter progress.Reporter
 	JobID    string
+
+	// Authentication
+	CookiesFromBrowser string // e.g., "brave", "chrome:Default", "firefox"
+}
+
+// appendAuthArgs adds authentication arguments to yt-dlp command.
+func appendAuthArgs(args []string, opts Options) []string {
+	if opts.CookiesFromBrowser != "" {
+		args = append(args, "--cookies-from-browser", opts.CookiesFromBrowser)
+	}
+	return args
 }
 
 // Download fetches metadata (and optionally downloads the media) for a given URL.
@@ -96,10 +108,21 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 	// Download best available file into workdir
 	// Use a fixed template based on ID to know where the file lands.
 	outTemplate := filepath.Join(workdir, "%(id)s.%(ext)s")
-	args := []string{
+
+	// Detect platform to conditionally skip --no-playlist for Instagram
+	// (Instagram stories are treated as playlists by yt-dlp)
+	platform, _, _ := util.DetectPlatform(url)
+	isInstagram := platform == util.PlatformInstagram
+
+	// Auth args must come first for yt-dlp compatibility
+	args := appendAuthArgs([]string{}, opts)
+	args = append(args,
 		"-f", "bestvideo+bestaudio/best",
 		"-o", outTemplate,
-		"--no-playlist",
+	)
+	// Skip --no-playlist for Instagram as stories are treated as playlists
+	if !isInstagram {
+		args = append(args, "--no-playlist")
 	}
 	if opts.Reporter != nil {
 		args = append(args, "--newline")
@@ -116,10 +139,11 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 	}
 
 	_, runErr := util.Run(ctx, util.CmdSpec{
-		Path:    opts.DownloaderPath,
-		Args:    args,
-		Dir:     workdir,
-		Verbose: opts.Verbose && opts.Reporter == nil,
+		Path:          opts.DownloaderPath,
+		Args:          args,
+		Dir:           workdir,
+		Verbose:       opts.Verbose && opts.Reporter == nil,
+		SensitiveArgs: []string{"--cookies", "--cookies-from-browser"},
 		StdoutLine: func(line string) {
 			if opts.Reporter == nil {
 				return
@@ -148,6 +172,14 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		},
 	})
 	if runErr != nil {
+		// Check for auth-related errors
+		low := strings.ToLower(runErr.Error())
+		if strings.Contains(low, "login required") ||
+			strings.Contains(low, "provide cookies") ||
+			strings.Contains(low, "cookies-from-browser") ||
+			strings.Contains(low, "403") {
+			return model.DownloadedVideo{}, workdir, fmt.Errorf("%w: try --cookies-from-browser brave (or chrome, firefox, safari)", ErrAuthRequired)
+		}
 		return model.DownloadedVideo{}, workdir, fmt.Errorf("downloader failed: %w", runErr)
 	}
 
@@ -201,16 +233,15 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 		return YTDLPInfo{}, ErrThreadsUnsupported
 	}
 
-	args := []string{
-		"--dump-json",
-		"-f", "bestvideo+bestaudio/best",
-		"--no-playlist",
-		normURL,
-	}
+	// Auth args must come first for yt-dlp compatibility
+	// Note: --no-playlist is omitted for metadata as it breaks Instagram stories
+	args := appendAuthArgs([]string{}, opts)
+	args = append(args, "--dump-json", normURL)
 	res, runErr := util.Run(ctx, util.CmdSpec{
-		Path:    opts.DownloaderPath,
-		Args:    args,
-		Verbose: opts.Verbose && opts.Reporter == nil,
+		Path:          opts.DownloaderPath,
+		Args:          args,
+		Verbose:       opts.Verbose && opts.Reporter == nil,
+		SensitiveArgs: []string{"--cookies", "--cookies-from-browser"},
 		// Forward stderr lines to Reporter logs in verbose UI mode (optional)
 		StderrLine: func(line string) {
 			if opts.Reporter != nil && opts.Verbose {
@@ -220,8 +251,17 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 	})
 	if runErr != nil && len(res.Stdout) == 0 {
 		msg := strings.ToLower(runErr.Error())
+		stderr := strings.ToLower(string(res.Stderr))
+		combined := msg + "\n" + stderr
 		if strings.Contains(msg, "unsupported url") && (strings.Contains(msg, "threads.net") || strings.Contains(msg, "threads.com")) {
 			return YTDLPInfo{}, ErrThreadsUnsupported
+		}
+		// Check for authentication-related errors
+		if strings.Contains(combined, "login required") ||
+			strings.Contains(combined, "provide cookies") ||
+			strings.Contains(combined, "cookies-from-browser") ||
+			(strings.Contains(combined, "403") && strings.Contains(combined, "instagram")) {
+			return YTDLPInfo{}, fmt.Errorf("%w: try --cookies-from-browser brave (or chrome, firefox, safari)", ErrAuthRequired)
 		}
 		return YTDLPInfo{}, fmt.Errorf("metadata fetch failed: %w", runErr)
 	}

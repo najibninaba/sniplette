@@ -24,6 +24,10 @@ type CmdSpec struct {
 	StdoutLine    func(string) // Called for each stdout line (if non-nil)
 	StderrLine    func(string) // Called for each stderr line (if non-nil)
 	CaptureStdout bool         // When false, do not buffer stdout into CmdResult (still invoke StdoutLine)
+
+	// SensitiveArgs lists flags whose following token should be masked in verbose output.
+	// Example: []string{"--cookies", "--cookies-from-browser"}
+	SensitiveArgs []string
 }
 
 // CmdResult contains captured output and exit status.
@@ -59,8 +63,9 @@ func Run(ctx context.Context, spec CmdSpec) (CmdResult, error) {
 	}
 
 	if spec.Verbose {
-		// Print the command line before execution
-		fmt.Fprintf(os.Stderr, "+ %s\n", shellQuote(spec.Path, spec.Args))
+		// Print the command line before execution, masking sensitive args
+		args := sanitizeArgs(spec.Args, spec.SensitiveArgs)
+		fmt.Fprintf(os.Stderr, "+ %s\n", shellQuote(spec.Path, args))
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -178,4 +183,24 @@ func quote(s string) string {
 		return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 	}
 	return s
+}
+
+// sanitizeArgs masks values of sensitive flags in args for logging.
+func sanitizeArgs(args []string, sensitive []string) []string {
+	if len(sensitive) == 0 {
+		return args
+	}
+	sens := make(map[string]struct{}, len(sensitive))
+	for _, s := range sensitive {
+		sens[s] = struct{}{}
+	}
+	out := make([]string, len(args))
+	copy(out, args)
+	for i := 0; i < len(out)-1; i++ {
+		if _, ok := sens[out[i]]; ok {
+			out[i+1] = "******"
+			i++ // skip the masked value
+		}
+	}
+	return out
 }

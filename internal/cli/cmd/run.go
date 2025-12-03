@@ -79,6 +79,7 @@ func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOp
 	verbose := getPersistentBool(cmd, "verbose", false)
 	dlBinary := getPersistentString(cmd, "dl-binary", "")
 	jobs := getPersistentInt(cmd, "jobs", 2)
+	cookiesFromBrowser := getPersistentString(cmd, "cookies-from-browser", "")
 	if jobs <= 0 {
 		jobs = 2
 	}
@@ -139,18 +140,19 @@ func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOp
 	outDir = filepath.Clean(outDir)
 
 	opts := model.CLIOptions{
-		OutDir:     outDir,
-		MaxSizeMB:  maxSizeMB,
-		Quality:    preset,
-		Resolution: resolution,
-		AudioOnly:  audioOnly,
-		Caption:    model.CaptionMode(caption),
-		KeepTemp:   keepTemp,
-		DLBinary:   dlBinary,
-		DryRun:     dryRun,
-		Verbose:    verbose,
-		NoUI:       noUI,
-		Jobs:       jobs,
+		OutDir:             outDir,
+		MaxSizeMB:          maxSizeMB,
+		Quality:            preset,
+		Resolution:         resolution,
+		AudioOnly:          audioOnly,
+		Caption:            model.CaptionMode(caption),
+		KeepTemp:           keepTemp,
+		DLBinary:           dlBinary,
+		DryRun:             dryRun,
+		Verbose:            verbose,
+		NoUI:               noUI,
+		Jobs:               jobs,
+		CookiesFromBrowser: cookiesFromBrowser,
 	}
 	return urls, opts, presetCRF, nil
 }
@@ -227,10 +229,11 @@ var (
 func processOne(ctx context.Context, rawURL string, in runInputs, dlPath, ffmpegPath string) error {
 	metaOnly := in.Options.DryRun
 	dv, tempDir, derr := downloader.Download(ctx, rawURL, downloader.Options{
-		DownloaderPath: dlPath,
-		Verbose:        in.Options.Verbose,
-		KeepTemp:       in.Options.KeepTemp,
-		MetadataOnly:   metaOnly,
+		DownloaderPath:     dlPath,
+		Verbose:            in.Options.Verbose,
+		KeepTemp:           in.Options.KeepTemp,
+		MetadataOnly:       metaOnly,
+		CookiesFromBrowser: in.Options.CookiesFromBrowser,
 	})
 	defer func() {
 		if !in.Options.KeepTemp && tempDir != "" {
@@ -239,6 +242,10 @@ func processOne(ctx context.Context, rawURL string, in runInputs, dlPath, ffmpeg
 	}()
 
 	if derr != nil {
+		// Provide a clearer message for auth errors
+		if errors.Is(derr, downloader.ErrAuthRequired) {
+			return &ExitError{Code: ExitDownloadError, Err: fmt.Errorf("Instagram requires authentication. Re-run with --cookies-from-browser brave (or chrome:Default, firefox, safari)")}
+		}
 		return &ExitError{Code: ExitDownloadError, Err: fmt.Errorf("%w: %v", errDownload, derr)}
 	}
 
@@ -340,6 +347,11 @@ func printPlan(rawURL, dlPath, ffmpegPath, tempDir, outputPath string, dv model.
 		fmt.Printf("- Audio bitrate:  %d kbps (AAC)\n", enc.AudioBitrateKbps)
 	}
 	fmt.Printf("- Caption:        %s\n", strings.ToUpper(string(opts.Caption)))
+	if opts.CookiesFromBrowser != "" {
+		fmt.Printf("- Auth:           cookies-from-browser\n")
+	} else {
+		fmt.Printf("- Auth:           none\n")
+	}
 }
 
 func bitrateForPreview(maxSizeMB int, durationSec float64, audioKbps, vMin, vMax int) int {

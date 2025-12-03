@@ -16,6 +16,61 @@ This tool does not bypass authentication or DRM; it only works with publicly acc
 - Instagram: `instagram.com`, `instagr.am`
 - YouTube: `youtube.com`, `youtu.be`
 
+## Authentication
+
+Some Instagram content (Stories, private posts) requires authentication. Sniplette supports importing cookies from your browser via yt-dlp's cookie extraction.
+
+### Usage
+
+```bash
+# Use cookies from Brave browser
+sniplette --cookies-from-browser brave https://www.instagram.com/stories/username/id/
+
+# Use cookies from other browsers
+sniplette --cookies-from-browser chrome:Default https://...
+sniplette --cookies-from-browser firefox https://...
+sniplette --cookies-from-browser safari https://...
+```
+
+### Supported browsers
+
+brave, chrome, chromium, edge, firefox, opera, safari, vivaldi, whale
+
+For Chromium-based browsers with multiple profiles, specify the profile name:
+```bash
+--cookies-from-browser "chrome:Profile 1"
+--cookies-from-browser "brave:Default"
+```
+
+### How it works
+
+- Sniplette passes `--cookies-from-browser` to yt-dlp
+- yt-dlp reads cookies from your browser's database on disk
+- The browser does not need to be running
+- Cookies are decrypted using your OS keychain (macOS) or keyring (Linux)
+- Sniplette never reads or stores cookies itself
+
+### Configuration
+
+You can set a default browser in your config file or environment:
+
+```yaml
+# ~/.config/sniplette/config.yaml
+cookies_from_browser: "brave"
+```
+
+```bash
+export SNIPLETTE_COOKIES_FROM_BROWSER="brave"
+```
+
+### When authentication is required
+
+If you try to download content that requires login without providing cookies, Sniplette will show a helpful error:
+
+```
+Instagram requires authentication. Re-run with --cookies-from-browser brave (or chrome:Default, firefox, safari)
+```
+
 ## Requirements
 
 - Go 1.21+
@@ -104,6 +159,7 @@ Supported configuration keys (in config file and env):
 - `verbose`
 - `dl_binary` (or `dl-binary`)
 - `jobs`
+- `cookies_from_browser` (or `cookies-from-browser`)
 
 Example `config.yaml`:
 
@@ -190,6 +246,7 @@ Core flags (available for subcommands):
 - `--caption string` Caption output: `txt`, `none` (default: `txt`)
 - `--keep-temp` Keep intermediate download files
 - `--dl-binary string` Path or name for `yt-dlp`/`youtube-dl`
+- `--cookies-from-browser string` Import cookies from browser (e.g., `brave`, `chrome:Default`, `firefox`)
 - `-v, --verbose` Show full subprocess commands/output
 - `--jobs int` Max concurrent jobs in TUI (default: 2)
 
@@ -298,7 +355,7 @@ go build ./cmd/sniplette
 
 ## Legal/Ethical Note
 
-This tool should only be used to download videos you're allowed to (your own content, or with permission). You must comply with Instagram's Terms of Service and local copyright laws. This tool orchestrates yt-dlp/ffmpeg and does not bypass DRM or authentication — it only works with publicly accessible URLs.
+This tool should only be used to download videos you're allowed to (your own content, or with permission). You must comply with Instagram's Terms of Service and local copyright laws. This tool orchestrates yt-dlp/ffmpeg and does not bypass DRM. When using `--cookies-from-browser`, you are accessing content with your own authenticated session.
 
 ## License
 
