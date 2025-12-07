@@ -16,12 +16,12 @@ This tool does not bypass authentication or DRM; it only works with publicly acc
 
 | Platform | Domains | Backend |
 |----------|---------|--------|
-| Instagram | `instagram.com`, `instagr.am` | yt-dlp |
-| YouTube | `youtube.com`, `youtu.be` | yt-dlp |
+| Instagram | `instagram.com`, `instagr.am` | [yt-dlp](https://github.com/yt-dlp/yt-dlp) |
+| YouTube | `youtube.com`, `youtu.be` | [yt-dlp](https://github.com/yt-dlp/yt-dlp) |
 | Threads | `threads.net` | [lux](https://github.com/iawia002/lux) |
 | Facebook | `facebook.com`, `fb.watch` | [lux](https://github.com/iawia002/lux) |
-| TikTok | `tiktok.com` | yt-dlp (lux fallback) |
-| Twitter/X | `twitter.com`, `x.com` | yt-dlp (lux fallback) |
+| TikTok | `tiktok.com` | [yt-dlp](https://github.com/yt-dlp/yt-dlp) ([lux](https://github.com/iawia002/lux) fallback) |
+| Twitter/X | `twitter.com`, `x.com` | [yt-dlp](https://github.com/yt-dlp/yt-dlp) ([lux](https://github.com/iawia002/lux) fallback) |
 
 ## Authentication
 
