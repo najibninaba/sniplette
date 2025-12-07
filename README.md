@@ -1,9 +1,9 @@
 # Sniplette
 
-Sniplette is a tiny video helper that turns large Instagram and YouTube videos into small, shareable clips. Give it a link, and Sniplette will fetch → transcode → compress → and hand you a neat little "snip" perfect for messaging apps, chats, and social platforms.
+Sniplette is a tiny video helper that turns large social media videos into small, shareable clips. Give it a link from Instagram, YouTube, Threads, Facebook, TikTok, or Twitter, and Sniplette will fetch → transcode → compress → and hand you a neat little "snip" perfect for messaging apps, chats, and social platforms.
 
 ### ✨ Features
-- 📥 Downloads from Instagram and YouTube using `yt-dlp`
+- 📥 Downloads from Instagram, YouTube, Threads, Facebook, TikTok, and Twitter
 - 🎞️ Re-encodes with `ffmpeg` for consistent, mobile-friendly formats
 - 📦 Shrinks videos down to configurable size limits (e.g., 50 MB)
 - 📱 Ensures compatibility with messaging apps like WhatsApp, Telegram, and iMessage
@@ -12,9 +12,16 @@ Sniplette is a tiny video helper that turns large Instagram and YouTube videos i
 
 This tool does not bypass authentication or DRM; it only works with publicly accessible URLs.
 
-## Supported platforms
-- Instagram: `instagram.com`, `instagr.am`
-- YouTube: `youtube.com`, `youtu.be`
+## Supported Platforms
+
+| Platform | Domains | Backend |
+|----------|---------|--------|
+| Instagram | `instagram.com`, `instagr.am` | yt-dlp |
+| YouTube | `youtube.com`, `youtu.be` | yt-dlp |
+| Threads | `threads.net` | [lux](https://github.com/iawia002/lux) |
+| Facebook | `facebook.com`, `fb.watch` | [lux](https://github.com/iawia002/lux) |
+| TikTok | `tiktok.com` | yt-dlp (lux fallback) |
+| Twitter/X | `twitter.com`, `x.com` | yt-dlp (lux fallback) |
 
 ## Authentication
 
@@ -73,10 +80,11 @@ Instagram requires authentication. Re-run with --cookies-from-browser brave (or 
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.23+
 - External tools in your `PATH`:
   - `yt-dlp` (preferred) or `youtube-dl`
   - `ffmpeg`
+- [lux](https://github.com/iawia002/lux) is bundled as a Go library (no separate install needed)
 
 Sniplette detects tools at startup:
 1. If `--dl-binary` is provided, it uses that path/name.
@@ -247,6 +255,7 @@ Core flags (available for subcommands):
 - `--keep-temp` Keep intermediate download files
 - `--dl-binary string` Path or name for `yt-dlp`/`youtube-dl`
 - `--cookies-from-browser string` Import cookies from browser (e.g., `brave`, `chrome:Default`, `firefox`)
+- `--no-fallback` Disable lux fallback for TikTok/Twitter (use yt-dlp only)
 - `-v, --verbose` Show full subprocess commands/output
 - `--jobs int` Max concurrent jobs in TUI (default: 2)
 
@@ -326,15 +335,15 @@ Captions:
 - `3` download error
 - `4` transcode error
 
-## Threads Support
+## Hybrid Backend Architecture
 
-Threads URLs are currently not supported.
+Sniplette uses a hybrid approach to maximize platform coverage:
 
-Sniplette relies on yt-dlp for metadata and media extraction. yt-dlp does not have a Threads (threads.net) extractor as of now, so attempts to download Threads posts fail. Sniplette detects Threads URLs and fails fast with a clear error instead of attempting a broken download.
+- **yt-dlp primary**: Instagram and YouTube use yt-dlp exclusively for reliable extraction
+- **lux primary**: Threads and Facebook use [lux](https://github.com/iawia002/lux) since yt-dlp lacks extractors for these platforms
+- **Fallback mode**: TikTok and Twitter try yt-dlp first, falling back to lux on failure
 
-- Upstream issue: https://github.com/yt-dlp/yt-dlp/issues/7523
-- Workaround: Use Instagram or YouTube URLs.
-- Future: We may add an experimental native Threads extractor in the tool if there is sufficient demand.
+Use `--no-fallback` to disable lux fallback for TikTok/Twitter if you prefer yt-dlp-only behavior.
 
 ## Troubleshooting
 
@@ -356,6 +365,13 @@ go build ./cmd/sniplette
 ## Legal/Ethical Note
 
 This tool should only be used to download videos you're allowed to (your own content, or with permission). You must comply with Instagram's Terms of Service and local copyright laws. This tool orchestrates yt-dlp/ffmpeg and does not bypass DRM. When using `--cookies-from-browser`, you are accessing content with your own authenticated session.
+
+## Acknowledgments
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Primary video extraction for Instagram/YouTube
+- [lux](https://github.com/iawia002/lux) - Video extraction library for Threads/Facebook support
+- [ffmpeg](https://ffmpeg.org/) - Media transcoding
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea) - Terminal UI framework
 
 ## License
 
