@@ -17,17 +17,8 @@ import (
 	"ig2wa/internal/util"
 )
 
-var ErrThreadsUnsupported = errors.New("threads not supported (yt-dlp has no extractor)")
 var ErrAuthRequired = errors.New("authentication required")
-
-func isThreadsURL(raw string) bool {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	if i := strings.Index(s, "://"); i != -1 {
-		s = s[i+3:]
-	}
-	s = strings.TrimPrefix(s, "www.")
-	return strings.HasPrefix(s, "threads.net/") || strings.HasPrefix(s, "threads.com/")
-}
+var ErrLuxFailed = errors.New("lux backend failed")
 
 // Options controls downloader behavior.
 type Options struct {
@@ -42,6 +33,9 @@ type Options struct {
 
 	// Authentication
 	CookiesFromBrowser string // e.g., "brave", "chrome:Default", "firefox"
+
+	// NoFallback disables Lux fallback for TikTok/Twitter (use yt-dlp only)
+	NoFallback bool
 }
 
 // appendAuthArgs adds authentication arguments to yt-dlp command.
@@ -54,11 +48,12 @@ func appendAuthArgs(args []string, opts Options) []string {
 
 // Download fetches metadata (and optionally downloads the media) for a given URL.
 // Returns the DownloadedVideo and the temp workdir used (for caller to cleanup).
+//
+// Platform dispatch:
+//   - Instagram, YouTube: yt-dlp only
+//   - Threads, Facebook: Lux only (yt-dlp has no extractor)
+//   - TikTok, Twitter: yt-dlp primary, Lux fallback on failure
 func Download(ctx context.Context, url string, opts Options) (model.DownloadedVideo, string, error) {
-	if opts.DownloaderPath == "" {
-		return model.DownloadedVideo{}, "", errors.New("downloader path is required")
-	}
-
 	workdir, err := util.MakeTempWorkdir("job")
 	if err != nil {
 		return model.DownloadedVideo{}, "", fmt.Errorf("create temp dir: %w", err)
@@ -73,16 +68,90 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 		})
 	}
 
-	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
-	if isThreadsURL(url) {
-		return model.DownloadedVideo{}, workdir, ErrThreadsUnsupported
+	// Detect platform for dispatch
+	platform, _, perr := util.DetectPlatform(url)
+	if perr != nil {
+		return model.DownloadedVideo{}, workdir, perr
 	}
 
-	// Normalize URL for yt-dlp (e.g., threads.com -> threads.net for Threads)
-	normURL := url
-	if pl, _, derr := util.DetectPlatform(url); derr == nil {
-		normURL = util.NormalizeURL(url, pl)
+	// Dispatch based on platform
+	switch platform {
+	case util.PlatformInstagram, util.PlatformYouTube:
+		// yt-dlp only
+		if opts.DownloaderPath == "" {
+			return model.DownloadedVideo{}, workdir, errors.New("downloader path is required")
+		}
+		return downloadViaYtDlp(ctx, url, workdir, opts, platform)
+
+	case util.PlatformThreads, util.PlatformFacebook:
+		// Lux only (yt-dlp has no extractor for these)
+		return downloadViaLux(ctx, url, workdir, opts, platform)
+
+	case util.PlatformTikTok, util.PlatformTwitter:
+		// Hybrid: try yt-dlp first, fallback to Lux
+		if opts.DownloaderPath == "" {
+			// No yt-dlp available, go directly to Lux
+			return downloadViaLux(ctx, url, workdir, opts, platform)
+		}
+		dv, _, ytErr := downloadViaYtDlp(ctx, url, workdir, opts, platform)
+		if ytErr == nil {
+			return dv, workdir, nil
+		}
+		// Check if we should fallback to Lux
+		if opts.NoFallback || !shouldFallbackToLux(ytErr) {
+			return dv, workdir, ytErr
+		}
+		// Fallback to Lux
+		if opts.Reporter != nil {
+			opts.Reporter.Update(progress.Update{
+				JobID:   opts.JobID,
+				Stage:   progress.StageMetadata,
+				Percent: -1,
+				Message: "Falling back to Lux backend",
+			})
+		}
+		return downloadViaLux(ctx, url, workdir, opts, platform)
+
+	default:
+		return model.DownloadedVideo{}, workdir, fmt.Errorf("unsupported platform: %s", platform)
 	}
+}
+
+// shouldFallbackToLux determines if a yt-dlp error warrants falling back to Lux.
+func shouldFallbackToLux(err error) bool {
+	if err == nil {
+		return false
+	}
+	low := strings.ToLower(err.Error())
+
+	// Don't fallback on auth/user errors - user needs to fix these
+	if strings.Contains(low, "login required") ||
+		strings.Contains(low, "cookies-from-browser") ||
+		strings.Contains(low, "authentication required") ||
+		errors.Is(err, ErrAuthRequired) {
+		return false
+	}
+
+	// Don't fallback on context cancellation
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	// Fallback on extractor/format failures
+	if strings.Contains(low, "unsupported url") ||
+		strings.Contains(low, "no video formats found") ||
+		strings.Contains(low, "extractor error") ||
+		strings.Contains(low, "unable to extract") {
+		return true
+	}
+
+	return false
+}
+
+// downloadViaYtDlp uses yt-dlp to download video.
+func downloadViaYtDlp(ctx context.Context, url, workdir string, opts Options, platform util.Platform) (model.DownloadedVideo, string, error) {
+	// Normalize URL for yt-dlp
+	normURL := util.NormalizeURL(url, platform)
 
 	// First: get metadata as JSON
 	info, err := fetchMetadata(ctx, opts, normURL)
@@ -109,9 +178,8 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 	// Use a fixed template based on ID to know where the file lands.
 	outTemplate := filepath.Join(workdir, "%(id)s.%(ext)s")
 
-	// Detect platform to conditionally skip --no-playlist for Instagram
+	// Check if Instagram to conditionally skip --no-playlist
 	// (Instagram stories are treated as playlists by yt-dlp)
-	platform, _, _ := util.DetectPlatform(url)
 	isInstagram := platform == util.PlatformInstagram
 
 	// Auth args must come first for yt-dlp compatibility
@@ -222,21 +290,10 @@ func Download(ctx context.Context, url string, opts Options) (model.DownloadedVi
 }
 
 func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, error) {
-	// Normalize URL for yt-dlp compatibility
-	normURL := url
-	if pl, _, err := util.DetectPlatform(url); err == nil {
-		normURL = util.NormalizeURL(url, pl)
-	}
-
-	// Fail fast for Threads URLs (unsupported upstream by yt-dlp)
-	if isThreadsURL(url) || isThreadsURL(normURL) {
-		return YTDLPInfo{}, ErrThreadsUnsupported
-	}
-
 	// Auth args must come first for yt-dlp compatibility
 	// Note: --no-playlist is omitted for metadata as it breaks Instagram stories
 	args := appendAuthArgs([]string{}, opts)
-	args = append(args, "--dump-json", normURL)
+	args = append(args, "--dump-json", url)
 	res, runErr := util.Run(ctx, util.CmdSpec{
 		Path:          opts.DownloaderPath,
 		Args:          args,
@@ -253,9 +310,6 @@ func fetchMetadata(ctx context.Context, opts Options, url string) (YTDLPInfo, er
 		msg := strings.ToLower(runErr.Error())
 		stderr := strings.ToLower(string(res.Stderr))
 		combined := msg + "\n" + stderr
-		if strings.Contains(msg, "unsupported url") && (strings.Contains(msg, "threads.net") || strings.Contains(msg, "threads.com")) {
-			return YTDLPInfo{}, ErrThreadsUnsupported
-		}
 		// Check for authentication-related errors
 		if strings.Contains(combined, "login required") ||
 			strings.Contains(combined, "provide cookies") ||

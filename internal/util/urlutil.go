@@ -12,6 +12,9 @@ const (
 	PlatformInstagram Platform = "instagram"
 	PlatformYouTube   Platform = "youtube"
 	PlatformThreads   Platform = "threads"
+	PlatformFacebook  Platform = "facebook"
+	PlatformTikTok    Platform = "tiktok"
+	PlatformTwitter   Platform = "twitter"
 )
 
 // DetectPlatform parses a raw URL string and determines if it targets a
@@ -37,10 +40,16 @@ func DetectPlatform(raw string) (Platform, *url.URL, error) {
 	case "youtube.com", "m.youtube.com", "youtu.be":
 		return PlatformYouTube, u, nil
 	case "threads.net", "threads.com":
-		return "", nil, fmt.Errorf("unsupported URL %q: Threads is not currently supported (yt-dlp has no extractor). Use Instagram or YouTube.", raw)
+		return PlatformThreads, u, nil
+	case "facebook.com", "m.facebook.com", "fb.watch", "fb.com":
+		return PlatformFacebook, u, nil
+	case "tiktok.com", "m.tiktok.com", "vm.tiktok.com":
+		return PlatformTikTok, u, nil
+	case "twitter.com", "mobile.twitter.com", "x.com":
+		return PlatformTwitter, u, nil
 	default:
 		return "", nil, fmt.Errorf(
-			"unsupported URL %q: only Instagram or YouTube are supported (instagram.com, instagr.am, youtube.com, youtu.be)",
+			"unsupported URL %q: supported platforms are Instagram, YouTube, Threads, Facebook, TikTok, and Twitter/X",
 			raw,
 		)
 	}

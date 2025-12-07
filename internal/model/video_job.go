@@ -34,6 +34,8 @@ type CLIOptions struct {
 	Jobs int  // Max concurrent jobs for TUI
 
 	CookiesFromBrowser string // e.g., "brave", "chrome:Default", "firefox"
+
+	NoFallback bool // Disable Lux fallback for TikTok/Twitter (use yt-dlp only)
 }
 
 // DownloadedVideo represents the media and metadata returned by the downloader.

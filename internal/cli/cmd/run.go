@@ -93,6 +93,7 @@ func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOp
 	keepTemp, _ := cmd.Flags().GetBool("keep-temp")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	noUI, _ := cmd.Flags().GetBool("no-ui")
+	noFallback, _ := cmd.Flags().GetBool("no-fallback")
 
 	quality = strings.ToLower(quality)
 	switch quality {
@@ -153,6 +154,7 @@ func assembleRunInputs(cmd *cobra.Command, args []string) ([]string, model.CLIOp
 		NoUI:               noUI,
 		Jobs:               jobs,
 		CookiesFromBrowser: cookiesFromBrowser,
+		NoFallback:         noFallback,
 	}
 	return urls, opts, presetCRF, nil
 }
@@ -234,6 +236,7 @@ func processOne(ctx context.Context, rawURL string, in runInputs, dlPath, ffmpeg
 		KeepTemp:           in.Options.KeepTemp,
 		MetadataOnly:       metaOnly,
 		CookiesFromBrowser: in.Options.CookiesFromBrowser,
+		NoFallback:         in.Options.NoFallback,
 	})
 	defer func() {
 		if !in.Options.KeepTemp && tempDir != "" {
@@ -244,7 +247,8 @@ func processOne(ctx context.Context, rawURL string, in runInputs, dlPath, ffmpeg
 	if derr != nil {
 		// Provide a clearer message for auth errors
 		if errors.Is(derr, downloader.ErrAuthRequired) {
-			return &ExitError{Code: ExitDownloadError, Err: fmt.Errorf("Instagram requires authentication. Re-run with --cookies-from-browser brave (or chrome:Default, firefox, safari)")}
+			platform, _, _ := util.DetectPlatform(rawURL)
+			return &ExitError{Code: ExitDownloadError, Err: fmt.Errorf("%s requires authentication. Re-run with --cookies-from-browser brave (or chrome:Default, firefox, safari)", platform)}
 		}
 		return &ExitError{Code: ExitDownloadError, Err: fmt.Errorf("%w: %v", errDownload, derr)}
 	}

@@ -271,6 +271,7 @@ func (m Model) runJob(jobID, url string) {
 		Reporter:           rep,
 		JobID:              jobID,
 		CookiesFromBrowser: m.opts.CookiesFromBrowser,
+		NoFallback:         m.opts.NoFallback,
 	})
 	// Cleanup unless keep-temp
 	defer func() {

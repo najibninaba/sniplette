@@ -93,6 +93,7 @@ func bindRunFlags(fs *pflag.FlagSet) {
 	fs.Bool("keep-temp", false, "Keep intermediate downloads")
 	fs.Bool("dry-run", false, "Show plan without executing") // deprecated in favor of 'plan'
 	fs.Bool("no-ui", false, "Disable TUI; use plain textual output")
+	fs.Bool("no-fallback", false, "Disable Lux fallback for TikTok/Twitter (use yt-dlp only)")
 }
 
 // Execute runs the CLI with the provided context.
